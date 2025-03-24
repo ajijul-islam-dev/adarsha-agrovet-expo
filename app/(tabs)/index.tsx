@@ -1,74 +1,101 @@
-import { Image, StyleSheet, Platform } from 'react-native';
+import React from "react";
+import { View, StyleSheet, ScrollView } from "react-native";
+import { Card, Text } from "react-native-paper";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Link } from "expo-router";
+import { MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
 
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
-
-export default function HomeScreen() {
+const HomeScreen = () => {
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12'
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          Tap the Explore tab to learn more about what's included in this starter app.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          When you're ready, run{' '}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+    <SafeAreaView style={styles.safeContainer}>
+      <ScrollView contentContainerStyle={styles.container}>
+        <Text style={styles.sectionTitle}>আদর্শ এগ্রোভেট লিমিটেড </Text>
+
+        {/* Product Stock */}
+        <Link href="/product-stock" asChild>
+          <Card style={styles.card}>
+            <View style={styles.cardContent}>
+              <FontAwesome5 name="box-open" size={24} color="#FF5733" />
+              <View style={styles.textContainer}>
+                <Text style={styles.cardTitle}>Product Stock</Text>
+                <Text style={styles.cardSubtitle}>View available stock</Text>
+              </View>
+              <MaterialIcons name="arrow-forward-ios" size={18} color="#888" />
+            </View>
+          </Card>
+        </Link>
+
+        {/* Officers List */}
+        <Link href="/officers-list" asChild>
+          <Card style={styles.card}>
+            <View style={styles.cardContent}>
+              <FontAwesome5 name="user-tie" size={24} color="#28A745" />
+              <View style={styles.textContainer}>
+                <Text style={styles.cardTitle}>Officers List</Text>
+                <Text style={styles.cardSubtitle}>Manage company officers</Text>
+              </View>
+              <MaterialIcons name="arrow-forward-ios" size={18} color="#888" />
+            </View>
+          </Card>
+        </Link>
+
+        {/* Orders */}
+        <Link href="/orders" asChild>
+          <Card style={styles.card}>
+            <View style={styles.cardContent}>
+              <FontAwesome5 name="shopping-cart" size={24} color="#F4A600" />
+              <View style={styles.textContainer}>
+                <Text style={styles.cardTitle}>Orders</Text>
+                <Text style={styles.cardSubtitle}>View & track orders</Text>
+              </View>
+              <MaterialIcons name="arrow-forward-ios" size={18} color="#888" />
+            </View>
+          </Card>
+        </Link>
+      </ScrollView>
+    </SafeAreaView>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  safeContainer: {
+    flex: 1,
+    backgroundColor: "#F8F9FA",
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  container: {
+    padding: 16,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 15,
+  },
+  card: {
+    backgroundColor: "#FFF",
+    padding: 16,
+    marginBottom: 10,
+    borderRadius: 12,
+    elevation: 3,
+  },
+  cardContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  textContainer: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#000",
+  },
+  cardSubtitle: {
+    fontSize: 14,
+    color: "#666",
   },
 });
+
+export default HomeScreen;
