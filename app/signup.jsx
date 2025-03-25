@@ -82,7 +82,7 @@ const SignupScreen = ({ navigation }) => {
             />
             {touched.password && errors.password && <Text style={styles.error}>{errors.password}</Text>}
 
-            <Button mode="contained" onPress={handleSubmit} style={styles.button}>
+            <Button mode="outlined" onPress={handleSubmit} style={styles.button}>
               নিবন্ধন করুন
             </Button>
 
@@ -131,8 +131,9 @@ const styles = StyleSheet.create({
   },
   button: {
     marginTop: 12,
-    paddingVertical: 8,
-    width: "80%",
+    paddingVertical: 3,
+    width: "100%",
+    borderRadius : 8
     
   },
   link: {

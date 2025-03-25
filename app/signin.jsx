@@ -31,7 +31,7 @@ const SigninScreen = ({ navigation }) => {
       {/* কোম্পানির নাম */}
       <Text style={styles.companyName}>আদর্শ এগ্রো ভেট</Text>
 
-      <Text style={styles.title}>প্রবেশ করুন</Text>
+      <Text style={styles.title}>লগইন করুন</Text>
 
       <Formik
         initialValues={{ email: "", password: "" }}
@@ -70,8 +70,8 @@ const SigninScreen = ({ navigation }) => {
             />
             {touched.password && errors.password && <Text style={styles.error}>{errors.password}</Text>}
 
-            <Button mode="contained" onPress={handleSubmit} style={styles.button}>
-              প্রবেশ করুন
+            <Button mode="outlined" onPress={handleSubmit} style={styles.button}>
+              লগইন করুন
             </Button>
 
             <Link style={{marginTop : 10}} href="/signup">
@@ -121,8 +121,9 @@ const styles = StyleSheet.create({
   },
   button: {
     marginTop: 12,
-    paddingVertical: 8,
-    width: "80%",
+    paddingVertical: 3,
+    width : '100%',
+    borderRadius : 8
   },
   link: {
     textAlign: "center",
