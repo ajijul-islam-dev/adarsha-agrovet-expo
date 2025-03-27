@@ -49,7 +49,7 @@ const UserSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ['pending', 'active', 'suspended', 'rejected'],
-    default: 'pending'
+    default: 'active'
   },
   createdAt: {
     type: Date,

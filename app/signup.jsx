@@ -117,7 +117,7 @@ const SignupScreen = () => {
                 loading={loading}
                 disabled={loading}
               >
-                নিবন্ধন করুন
+                {!loading && 'নিবন্ধন করুন'}
               </Button>
 
               <Link style={{marginTop: 10}} href="/signin">

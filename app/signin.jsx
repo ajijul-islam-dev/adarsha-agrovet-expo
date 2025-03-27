@@ -19,13 +19,7 @@ const SigninScreen = ({ navigation }) => {
       .required("পাসওয়ার্ড আবশ্যক"),
   });
 
-  // সাইন-ইন ফাংশন (Handle Sign-In)
-  const handleSignin = (values) => {
-    console.log("ব্যবহারকারীর তথ্য:", values);
-    // Firebase Auth বা ব্যাকেন্ড API কল
-  };
-
-  const {test,handleLogin} = useContext(ServicesProvider);
+  const {handleLogin,loading} = useContext(ServicesProvider);
   
   return (
     <SafeAreaView style={styles.container}>
@@ -74,8 +68,8 @@ const SigninScreen = ({ navigation }) => {
             />
             {touched.password && errors.password && <Text style={styles.error}>{errors.password}</Text>}
 
-            <Button mode="outlined" onPress={handleSubmit} style={styles.button}>
-              লগইন করুন
+            <Button loading={loading} disabled={loading} mode="outlined" onPress={handleSubmit} style={styles.button}>
+              {!loading && 'লগইন করুন'}
             </Button>
 
             <Link style={{marginTop : 10}} href="/signup">
