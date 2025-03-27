@@ -8,6 +8,9 @@
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "extra": {
+      "API_URL": "http://localhost:3000"
+    },
     "ios": {
       "supportsTablet": true
     },
