@@ -1,10 +1,12 @@
-import React, { useState } from "react";
+import React, { useState,useContext } from "react";
 import { View, StyleSheet, Image } from "react-native";
 import { TextInput, Button, Text } from "react-native-paper";
 import { Formik } from "formik";
 import * as Yup from "yup";
 import { Link } from "expo-router";
 import {SafeAreaView} from 'react-native-safe-area-context';
+import {ServicesProvider} from '../provider/Provider.jsx';
+
 
 const SigninScreen = ({ navigation }) => {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
@@ -23,6 +25,8 @@ const SigninScreen = ({ navigation }) => {
     // Firebase Auth বা ব্যাকেন্ড API কল
   };
 
+  const {test,handleLogin} = useContext(ServicesProvider);
+  
   return (
     <SafeAreaView style={styles.container}>
       {/* কোম্পানির লোগো */}
@@ -36,7 +40,7 @@ const SigninScreen = ({ navigation }) => {
       <Formik
         initialValues={{ email: "", password: "" }}
         validationSchema={SigninSchema}
-        onSubmit={handleSignin}
+        onSubmit={handleLogin}
       >
         {({ handleChange, handleBlur, handleSubmit, values, errors, touched }) => (
           <>
