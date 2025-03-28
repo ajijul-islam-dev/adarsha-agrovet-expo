@@ -14,41 +14,59 @@ dotenv.config();
 app.use(express.json());
 app.use(cors());
 
+// JWT Verification Middleware
+const verifyToken = async (req, res, next) => {
+  const token = req.headers.token || req.headers.authorization?.split(' ')[1];
+  
+  if (!token) {
+    return res.status(401).json({ 
+      success: false,
+      message: 'Authentication token required' 
+    });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    return res.status(403).json({
+      success: false,
+      message: 'Invalid or expired token',
+      error: error.message
+    });
+  }
+};
+
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('Connected to MongoDB'))
   .catch(err => console.error('MongoDB connection error:', err));
 
-// JWT Secret Key
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-here';
-
-// Test endpoint
+// Routes
 app.get('/', (req, res) => {
   res.send('Adarsha AgroVet server is connected');
 });
 
-// User registration endpoint
+// User Registration
 app.post('/register', async (req, res) => {
   try {
     const { name, email, phone, area, password } = req.body;
 
-    // Check if user already exists
     const existingUser = await User.findOne({ $or: [{ email }, { phone }] });
     if (existingUser) {
       return res.status(400).json({
         success: false,
-        message: 'ইউজার ইতিমধ্যে বিদ্যমান',
+        message: 'User already exists',
         errors: {
-          email: email === existingUser.email ? 'এই ইমেইল ইতিমধ্যে ব্যবহৃত হয়েছে' : null,
-          phone: phone === existingUser.phone ? 'এই ফোন নম্বর ইতিমধ্যে ব্যবহৃত হয়েছে' : null
+          email: email === existingUser.email ? 'Email already in use' : null,
+          phone: phone === existingUser.phone ? 'Phone already in use' : null
         }
       });
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create new user
     const user = new User({
       name,
       email,
@@ -56,14 +74,14 @@ app.post('/register', async (req, res) => {
       area,
       password: hashedPassword,
       role: "officer",
-      status: "pending"
+      status: "pending" // Default status
     });
 
     await user.save();
 
     res.status(201).json({
       success: true,
-      message: 'নিবন্ধন সফল হয়েছে',
+      message: 'Registration successful',
       user: {
         id: user._id,
         name: user.name,
@@ -84,72 +102,83 @@ app.post('/register', async (req, res) => {
       });
       return res.status(400).json({
         success: false,
-        message: 'ভ্যালিডেশন ত্রুটি',
+        message: 'Validation error',
         errors
       });
     }
     res.status(500).json({
       success: false,
-      message: 'সার্ভার ত্রুটি',
+      message: 'Server error',
       error: error.message
     });
   }
 });
 
-// Login endpoint
+// User Login
 app.post('/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
+  const { email, password } = req.body;
 
-    // 1. Check if user exists
-    const user = await User.findOne({ email });
+  if (!email || !password) {
+    return res.status(400).json({
+      success: false,
+      message: 'Email and password are required'
+    });
+  }
+
+  try {
+    const user = await User.findOne({ email }).select('+password +status');
+    
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'ইমেইল বা পাসওয়ার্ড ভুল'
+        message: 'Invalid credentials'
       });
     }
 
-    // 2. Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        message: 'ইমেইল বা পাসওয়ার্ড ভুল'
-      });
-    }
-
-    // 3. Check if the user account is active
+    // Status check before password verification
     if (user.status !== 'active') {
       return res.status(403).json({
         success: false,
-        message: 'আপনার অ্যাকাউন্ট এখনও সক্রিয় হয়নি'
+        message: `Account is ${user.status}`,
+        status: user.status
       });
     }
 
-    // 4. Generate JWT token
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
+    }
+
+    const tokenPayload = {
+      id: user._id,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+      area: user.area,
+      phone: user.phone
+    };
+
     const token = jwt.sign(
-      {
-        userId: user._id,
-        email: user.email,
-        role: user.role
-      },
-      JWT_SECRET,
-      { expiresIn: '1d' } // Token expires in 1 day
+      tokenPayload,
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
     );
 
-    // 5. Send success response with token
     res.status(200).json({
       success: true,
-      message: 'লগইন সফল হয়েছে',
+      message: 'Login successful',
       token,
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
-        phone: user.phone,
+        status: user.status,
         role: user.role,
-        status: user.status
+        area: user.area,
+        phone: user.phone
       }
     });
 
@@ -157,13 +186,85 @@ app.post('/login', async (req, res) => {
     console.error('Login error:', error);
     res.status(500).json({
       success: false,
-      message: 'সার্ভার ত্রুটি',
-      error: error.message
+      message: 'Authentication failed',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Get Current User
+app.get('/current-user', verifyToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id)
+      .select('-password -__v');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Verify status from database
+    if (user.status !== 'active') {
+      return res.status(403).json({
+        success: false,
+        message: `Account is ${user.status}`,
+        status: user.status
+      });
+    }
+
+    res.json({
+      success: true,
+      user: user.toObject()
+    });
+
+  } catch (error) {
+    console.error('Current user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
+// Admin Endpoints
+app.patch('/approve-user/:id', verifyToken, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      message: 'Admin privileges required'
+    });
+  }
+
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { status: 'active' },
+      { new: true }
+    ).select('-password');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'User approved',
+      user
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Approval failed'
     });
   }
 });
 
 // Start server
 app.listen(PORT, () => {
-  console.log('Server is running on PORT', PORT);
+  console.log(`Server running on port ${PORT}`);
 });

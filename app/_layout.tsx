@@ -3,6 +3,8 @@ import { StatusBar } from 'expo-status-bar';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Provider from '../provider/Provider.jsx';
+import ProtectedRoute from '../components/ProtectedRoute.jsx';
+
 
 const theme = {
   colors: {
@@ -28,7 +30,9 @@ export default function RootLayout() {
       <Provider>
         <PaperProvider theme={theme}>
           <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+           
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+           
             <Stack.Screen name="+not-found" />
           </Stack>
           <StatusBar style="auto" />
