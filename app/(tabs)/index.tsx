@@ -1,10 +1,8 @@
-import {useContext} from "react";
 import { View, StyleSheet, ScrollView, Image } from "react-native";
 import { Appbar, Card, Text } from "react-native-paper";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { Link } from "expo-router";
 import { MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
-import {ServicesProvider} from '../../provider/Provider.jsx';
+
 const HomeScreen = () => {
   return (
     <View style={styles.safeContainer}>
@@ -30,6 +28,34 @@ const HomeScreen = () => {
               <View style={styles.textContainer}>
                 <Text style={styles.cardTitle}>Product Stock</Text>
                 <Text style={styles.cardSubtitle}>View available stock</Text>
+              </View>
+              <MaterialIcons name="arrow-forward-ios" size={18} color="#888" />
+            </View>
+          </Card>
+        </Link>
+
+        {/* Add Product */}
+        <Link href="/add-product" asChild>
+          <Card style={styles.card}>
+            <View style={styles.cardContent}>
+              <FontAwesome5 name="plus-square" size={24} color="#4CAF50" />
+              <View style={styles.textContainer}>
+                <Text style={styles.cardTitle}>Add Product</Text>
+                <Text style={styles.cardSubtitle}>Add new product to inventory</Text>
+              </View>
+              <MaterialIcons name="arrow-forward-ios" size={18} color="#888" />
+            </View>
+          </Card>
+        </Link>
+
+        {/* Add Store - New Card */}
+        <Link href="/add-store" asChild>
+          <Card style={styles.card}>
+            <View style={styles.cardContent}>
+              <FontAwesome5 name="store" size={24} color="#9C27B0" />
+              <View style={styles.textContainer}>
+                <Text style={styles.cardTitle}>Add Store</Text>
+                <Text style={styles.cardSubtitle}>Register new store location</Text>
               </View>
               <MaterialIcons name="arrow-forward-ios" size={18} color="#888" />
             </View>
@@ -65,7 +91,7 @@ const HomeScreen = () => {
         </Link>
 
         {/* Stores */}
-        <Link href="/stores" asChild>
+        <Link href="/my-stores" asChild>
           <Card style={styles.card}>
             <View style={styles.cardContent}>
               <FontAwesome5 name="store" size={24} color="#9C27B0" />

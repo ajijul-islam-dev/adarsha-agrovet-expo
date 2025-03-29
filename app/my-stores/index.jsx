@@ -6,20 +6,20 @@ import { Link } from "expo-router";
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { ServicesProvider } from '../../provider/Provider.jsx';
 
-const AllStoresScreen = () => {
+const MyStoresScreen = () => {
   const theme = useTheme();
-  const { handleGetAllStores, loading, stores, showMessage } = useContext(ServicesProvider);
+  const { handleGetMyStores, loading, myStores, showMessage,user } = useContext(ServicesProvider);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterVisible, setFilterVisible] = useState(false);
   const [filterOption, setFilterOption] = useState("all");
   const menuAnchorRef = useRef(null);
 
-  // Get unique areas from the stores data
-  const uniqueAreas = ["all", ...new Set(stores.map(store => store.area))];
+  // Get unique areas from the user's myStores data
+  const uniqueAreas = ["all", ...new Set(myStores.map(store => store.area))];
 
-  // Fetch stores when search or filter changes
+  // Fetch user's myStores when search or filter changes
   useEffect(() => {
-    handleGetAllStores(searchQuery, filterOption === "all" ? "" : filterOption);
+    handleGetMyStores(searchQuery, filterOption === "all" ? "" : filterOption);
   }, [searchQuery, filterOption]);
 
   const renderEmptyState = () => {
@@ -28,7 +28,7 @@ const AllStoresScreen = () => {
         <View style={styles.emptyContainer}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={[styles.emptyText, { color: theme.colors.onSurface }]}>
-            Loading stores...
+            Loading your stores...
           </Text>
         </View>
       );
@@ -45,8 +45,19 @@ const AllStoresScreen = () => {
           No stores found
         </Text>
         <Text style={[styles.emptySubText, { color: theme.colors.onSurface }]}>
-          {searchQuery ? "Try a different search term" : "Add stores to get started"}
+          {searchQuery ? "Try a different search term" : "You don't have any stores yet"}
         </Text>
+        {!searchQuery && (
+          <Link href="/stores/add" asChild>
+            <Button 
+              mode="contained" 
+              style={{ marginTop: 16 }}
+              icon="plus"
+            >
+              Add Your First Store
+            </Button>
+          </Link>
+        )}
       </View>
     );
   };
@@ -57,7 +68,7 @@ const AllStoresScreen = () => {
         {/* Header */}
         <View style={styles.header}>
           <Text variant="headlineSmall" style={[styles.headerText, { color: theme.colors.onSurface }]}>
-            Stores List
+            My Stores
           </Text>
         </View>
 
@@ -67,7 +78,7 @@ const AllStoresScreen = () => {
             outlineColor={theme.colors.outline}
             activeOutlineColor={theme.colors.primary}
             mode="outlined"
-            placeholder="Search store..."
+            placeholder="Search your stores..."
             value={searchQuery}
             onChangeText={setSearchQuery}
             style={[styles.searchInput, { backgroundColor: theme.colors.surface }]}
@@ -84,42 +95,44 @@ const AllStoresScreen = () => {
             theme={{ colors: { text: theme.colors.onSurface } }}
           />
 
-          <Menu
-            visible={filterVisible}
-            onDismiss={() => setFilterVisible(false)}
-            anchor={
-              <Button
-                ref={menuAnchorRef}
-                onPress={() => setFilterVisible(true)}
-                mode="outlined"
-                style={[styles.sortButton, { borderColor: theme.colors.primary }]}
-                icon="filter"
-                contentStyle={{ flexDirection: "row-reverse" }}
-                labelStyle={{ color: theme.colors.primary }}
-              >
-                {filterOption === "all" ? "All Areas" : filterOption}
-              </Button>
-            }
-          >
-            {uniqueAreas.map((area) => (
-              <Menu.Item 
-                key={area}
-                leadingIcon={filterOption === area ? "check" : null}
-                onPress={() => { 
-                  setFilterOption(area); 
-                  setFilterVisible(false); 
-                }} 
-                title={area === "all" ? "All Areas" : area} 
-              />
-            ))}
-          </Menu>
+          {myStores.length > 0 && (
+            <Menu
+              visible={filterVisible}
+              onDismiss={() => setFilterVisible(false)}
+              anchor={
+                <Button
+                  ref={menuAnchorRef}
+                  onPress={() => setFilterVisible(true)}
+                  mode="outlined"
+                  style={[styles.sortButton, { borderColor: theme.colors.primary }]}
+                  icon="filter"
+                  contentStyle={{ flexDirection: "row-reverse" }}
+                  labelStyle={{ color: theme.colors.primary }}
+                >
+                  {filterOption === "all" ? "All Areas" : filterOption}
+                </Button>
+              }
+            >
+              {uniqueAreas.map((area) => (
+                <Menu.Item 
+                  key={area}
+                  leadingIcon={filterOption === area ? "check" : null}
+                  onPress={() => { 
+                    setFilterOption(area); 
+                    setFilterVisible(false); 
+                  }} 
+                  title={area === "all" ? "All Areas" : area} 
+                />
+              ))}
+            </Menu>
+          )}
         </View>
 
         {/* Stores List */}
         <View style={{ flex: 1 }}>
-          {stores.length > 0 ? (
+          {myStores.length > 0 ? (
             <FlatList
-              data={stores}
+              data={myStores}
               keyExtractor={(item) => item._id}
               contentContainerStyle={styles.listContent}
               renderItem={({ item }) => (
@@ -139,8 +152,22 @@ const AllStoresScreen = () => {
                       />
                     )}
                     right={() => (
-                      <View style={[styles.dueBadge, { backgroundColor: theme.colors.errorContainer }]}>
-                        <Text style={[styles.dueBadgeText, { color: theme.colors.onErrorContainer }]}>
+                      <View style={[
+                        styles.dueBadge, 
+                        { 
+                          backgroundColor: item.totalDue > 0 
+                            ? theme.colors.errorContainer 
+                            : theme.colors.surfaceVariant
+                        }
+                      ]}>
+                        <Text style={[
+                          styles.dueBadgeText, 
+                          { 
+                            color: item.totalDue > 0 
+                              ? theme.colors.onErrorContainer 
+                              : theme.colors.onSurfaceVariant
+                          }
+                        ]}>
                           ৳{(item.totalDue || 0).toLocaleString()}
                         </Text>
                       </View>
@@ -155,7 +182,7 @@ const AllStoresScreen = () => {
                           color={theme.colors.primary} 
                         /> {item.area}
                       </Text>
-                      <Text style={[styles.storeCode, { color: theme.colors.onSurface }]}>
+                      <Text style={[styles.storeCode, { color: theme.colors.onSurfaceVariant }]}>
                         Code: {item.storeCode}
                       </Text>
                     </View>
@@ -213,7 +240,7 @@ const styles = StyleSheet.create({
   },
   storeCard: {
     marginVertical: 5,
-    marginHorizontal : 3,
+    marginHorizontal: 3,
     borderRadius: 12,
   },
   storeIcon: {
@@ -272,4 +299,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default AllStoresScreen;
+export default MyStoresScreen;

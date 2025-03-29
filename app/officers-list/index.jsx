@@ -1,47 +1,94 @@
-import React, { useState, useRef } from "react";
-import { View, FlatList, StyleSheet } from "react-native";
+import React, { useState, useRef, useContext, useEffect } from "react";
+import { View, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { TextInput, Card, Text, Button, Menu, PaperProvider, Divider, useTheme } from "react-native-paper";
 import { Link } from "expo-router";
-import { MaterialIcons } from "@expo/vector-icons";
+import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { ServicesProvider } from '../../provider/Provider.jsx';
 
 const OfficersListScreen = () => {
   const theme = useTheme();
+  const { handleGetAllOfficers, loading, officers, showMessage } = useContext(ServicesProvider);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterVisible, setFilterVisible] = useState(false);
   const [filterOption, setFilterOption] = useState("all");
   const menuAnchorRef = useRef(null);
 
-  const officers = [
-    { id: "1", name: "John Doe", totalDue: 15000, area: "Dhaka", areaCode: "DH-101" },
-    { id: "2", name: "Jane Smith", totalDue: 8500, area: "Chittagong", areaCode: "CTG-202" },
-    { id: "3", name: "Mike Johnson", totalDue: 22000, area: "Dhaka", areaCode: "DH-102" },
-    { id: "4", name: "Sarah Williams", totalDue: 12000, area: "Sylhet", areaCode: "SYL-301" },
-    { id: "5", name: "David Brown", totalDue: 18000, area: "Chittagong", areaCode: "CTG-203" },
-  ];
+  // Get unique areas from the officers data
+  const uniqueAreas = ["all", ...new Set(officers.map(officer => officer.area))];
 
+  // Filter officers based on search and filter
   const filteredOfficers = officers.filter((officer) => {
     const matchesSearch = officer.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesFilter = filterOption === "all" || officer.area === filterOption;
     return matchesSearch && matchesFilter;
   });
 
-  const uniqueAreas = ["all", ...new Set(officers.map(officer => officer.area))];
+  // Fetch officers when search or filter changes
+  useEffect(() => {
+    handleGetAllOfficers(searchQuery, filterOption);
+  }, [searchQuery, filterOption]);
+
+  const renderEmptyState = () => {
+    if (loading) {
+      return (
+        <View style={styles.emptyContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={[styles.emptyText, { color: theme.colors.onSurface }]}>
+            Loading officers...
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.emptyContainer}>
+        <MaterialCommunityIcons 
+          name="account-search" 
+          size={60} 
+          color={theme.colors.backdrop} 
+        />
+        <Text style={[styles.emptyText, { color: theme.colors.onSurface }]}>
+          No officers found
+        </Text>
+        <Text style={[styles.emptySubText, { color: theme.colors.onSurface }]}>
+          {searchQuery ? "Try a different search term" : "Add officers to get started"}
+        </Text>
+      </View>
+    );
+  };
 
   return (
     <PaperProvider>
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text variant="headlineSmall" style={[styles.headerText, { color: theme.colors.onSurface }]}>
+            Officers List
+          </Text>
+        </View>
+
         {/* Search & Filter Row */}
         <View style={styles.searchSortContainer}>
           <TextInput
-            outlineColor="transparent"
-            activeOutlineColor='transparent'
+            outlineColor={theme.colors.outline}
+            activeOutlineColor={theme.colors.primary}
             mode="outlined"
             placeholder="Search officer..."
             value={searchQuery}
             onChangeText={setSearchQuery}
-            style={{...styles.searchInput, borderColor: theme.colors.primary, borderWidth: 1}}
-            left={<TextInput.Icon icon="magnify" />}
+            style={[styles.searchInput, { backgroundColor: theme.colors.surface }]}
+            left={<TextInput.Icon icon="magnify" color={theme.colors.onSurface} />}
+            right={
+              searchQuery ? (
+                <TextInput.Icon
+                  icon="close"
+                  color={theme.colors.onSurface}
+                  onPress={() => setSearchQuery("")}
+                />
+              ) : null
+            }
+            theme={{ colors: { text: theme.colors.onSurface } }}
           />
 
           <Menu
@@ -52,8 +99,9 @@ const OfficersListScreen = () => {
                 ref={menuAnchorRef}
                 onPress={() => setFilterVisible(true)}
                 mode="outlined"
-                style={[styles.sortButton, { borderColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center' }]}
+                style={[styles.sortButton, { borderColor: theme.colors.primary }]}
                 icon="filter"
+                contentStyle={{ flexDirection: "row-reverse" }}
                 labelStyle={{ color: theme.colors.primary }}
               >
                 {filterOption === "all" ? "All Areas" : filterOption}
@@ -63,6 +111,7 @@ const OfficersListScreen = () => {
             {uniqueAreas.map((area) => (
               <Menu.Item 
                 key={area}
+                leadingIcon={filterOption === area ? "check" : null}
                 onPress={() => { 
                   setFilterOption(area); 
                   setFilterVisible(false); 
@@ -75,34 +124,54 @@ const OfficersListScreen = () => {
 
         {/* Officers List */}
         <View style={{ flex: 1 }}>
-          <FlatList
-            data={filteredOfficers}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <Card style={[styles.productCard, { borderRadius: 8 }]}>
-                <Card.Title 
-                  title={item.name} 
-                  titleStyle={styles.title} 
-                  subtitle={`Area: ${item.area} (${item.areaCode})`}
-                  subtitleStyle={{color: theme.colors.primary}}
-                />
-                <Card.Content style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <View>
-                    <Text style={styles.price}>Total Due: ৳{item.totalDue.toLocaleString()}</Text>
-                    <Text style={styles.packSize}>Area Code: {item.areaCode}</Text>
-                  </View>
-                  <Link href={`/officer-details/${item.id}`} asChild>
-                    <MaterialIcons 
-                      name="arrow-forward-ios" 
-                      size={20} 
-                      color={theme.colors.primary} 
-                      style={styles.arrowIcon}
-                    />
-                  </Link>
-                </Card.Content>
-              </Card>
-            )}
-          />
+          {filteredOfficers.length > 0 ? (
+            <FlatList
+              data={filteredOfficers}
+              keyExtractor={(item) => item._id}
+              contentContainerStyle={styles.listContent}
+              renderItem={({ item }) => (
+                <Card style={[styles.productCard, { backgroundColor: theme.colors.surface }]} mode="elevated">
+                  <Card.Title 
+                    title={item.name} 
+                    titleStyle={[styles.title, { color: theme.colors.onSurface }]} 
+                    titleVariant="titleMedium"
+                    right={() => (
+                      <View style={[styles.dueBadge, { backgroundColor: theme.colors.surfaceVariant }]}>
+                        <Text style={[styles.dueBadgeText, { color: theme.colors.primary }]}>
+                          ৳{item.totalDue?.toLocaleString() || '0'}
+                        </Text>
+                      </View>
+                    )}
+                  />
+                  <Card.Content style={styles.cardContent}>
+                    <View style={styles.officerInfo}>
+                      <Text style={[styles.areaText, { color: theme.colors.primary }]}>
+                        <MaterialCommunityIcons 
+                          name="map-marker" 
+                          size={16} 
+                          color={theme.colors.primary} 
+                        /> {item.area}
+                      </Text>
+                      <Text style={[styles.areaCode, { color: theme.colors.onSurface }]}>
+                        Code: {item.areaCode}
+                      </Text>
+                    </View>
+                    <Link href={`/officer-details/${item.id}`} asChild>
+                      <TouchableOpacity style={styles.arrowButton}>
+                        <MaterialIcons 
+                          name="arrow-forward-ios" 
+                          size={20} 
+                          color={theme.colors.primary} 
+                        />
+                      </TouchableOpacity>
+                    </Link>
+                  </Card.Content>
+                </Card>
+              )}
+            />
+          ) : (
+            renderEmptyState()
+          )}
         </View>
       </SafeAreaView>
     </PaperProvider>
@@ -110,18 +179,90 @@ const OfficersListScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: "#f8f9fa" },
-  searchSortContainer: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
-  searchInput: { flex: 3, marginRight: 10, backgroundColor: "transparent", borderRadius: 8 },
-  sortButton: { flex: 1, borderRadius: 8, borderWidth: 1 },
-
-  // Card
-  productCard: { marginBottom: 10, backgroundColor: "#fff", elevation: 3 },
-  title: { fontSize: 18, fontWeight: "bold" },
-  price: { fontSize: 16, fontWeight: "bold", color: "#007BFF" },
-  packSize: { fontSize: 14, fontWeight: "600" },
-  arrowIcon: {
+  container: {
+    flex: 1,
+    padding: 10,
+  },
+  header: {
+    marginBottom: 16,
+  },
+  headerText: {
+    fontWeight: "bold",
+  },
+  searchSortContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    height: 48,
+    borderRadius: 8,
+  },
+  sortButton: {
+    height: 48,
+    justifyContent: "center",
+    borderRadius: 8,
+  },
+  listContent: {
+    paddingBottom: 16,
+  },
+  productCard: {
+    marginVertical: 12,
+    borderRadius: 12,
+    marginHorizontal: 8
+  },
+  title: {
+    fontWeight: "bold",
+  },
+  cardContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingTop: 0,
+  },
+  officerInfo: {
+    flex: 1,
+    marginRight: 8,
+  },
+  areaText: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  areaCode: {
+    fontSize: 14,
+  },
+  dueBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginRight: 8,
+  },
+  dueBadgeText: {
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  arrowButton: {
     padding: 8,
+    borderRadius: 8,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 32,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: "500",
+    marginTop: 16,
+    textAlign: "center",
+  },
+  emptySubText: {
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: "center",
   },
 });
 
