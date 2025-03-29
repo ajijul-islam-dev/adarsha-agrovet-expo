@@ -5,6 +5,7 @@ import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import User from './models/User.js';
+import Product from './models/Product.js'
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -263,6 +264,186 @@ app.patch('/approve-user/:id', verifyToken, async (req, res) => {
     });
   }
 });
+
+// _____________________Products___________________________
+// Product Routes
+
+// Create a Product
+app.post('/products', verifyToken, async (req, res) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'officer') {
+    return res.status(403).json({
+      success: false,
+      message: 'Admin or officer privileges required'
+    });
+  }
+
+  try {
+    const { productName, productCode, category, price, stock, packSize, unit, description } = req.body;
+
+    const existingProduct = await Product.findOne({ productCode });
+    if (existingProduct) {
+      return res.status(400).json({
+        success: false,
+        message: 'Product with this code already exists'
+      });
+    }
+
+    const product = new Product({
+      productName,
+      productCode,
+      category,
+      price,
+      stock,
+      packSize,
+      unit,
+      description,
+    });
+
+    await product.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'Product created successfully',
+      product
+    });
+
+  } catch (error) {
+    console.error('Create product error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
+
+// Get all Products
+app.get('/products', async (req, res) => {
+  try {
+    const { search, sort } = req.query;
+
+    let query = {};
+    if (search) {
+      query.productName = { $regex: search, $options: 'i' }; // Case-insensitive search
+    }
+
+    let sortOption = {};
+    if (sort === 'price') {
+      sortOption.price = -1; // Sort by price descending
+    } else if (sort === 'stock') {
+      sortOption.stock = -1; // Sort by stock descending
+    }
+
+    const products = await Product.find(query).sort(sortOption);
+
+    res.json({
+      success: true,
+      products
+    });
+  } catch (error) {
+    console.error('Get products error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
+
+// Get Product by ID
+app.get('/products/:id', async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
+    }
+    res.json({
+      success: true,
+      product
+    });
+  } catch (error) {
+    console.error('Get product error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
+
+// Update Product
+app.patch('/products/:id', verifyToken, async (req, res) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'officer') {
+    return res.status(403).json({
+      success: false,
+      message: 'Admin or officer privileges required'
+    });
+  }
+
+  try {
+    const updatedProduct = await Product.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true }
+    );
+
+    if (!updatedProduct) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Product updated successfully',
+      product: updatedProduct
+    });
+  } catch (error) {
+    console.error('Update product error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
+
+// Delete Product
+app.delete('/products/:id', verifyToken, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      message: 'Admin privileges required'
+    });
+  }
+
+  try {
+    const deletedProduct = await Product.findByIdAndDelete(req.params.id);
+    if (!deletedProduct) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Product deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete product error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
+
 
 // Start server
 app.listen(PORT, () => {
