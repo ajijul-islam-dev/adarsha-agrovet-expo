@@ -761,45 +761,41 @@ app.get('/stores', verifyToken, async (req, res) => {
   }
 });
 
-// // Get Single Store
-// app.get('/stores/:id', verifyToken, async (req, res) => {
-//   try {
-//     const store = await Store.findById(req.params.id)
-//       .populate('officers.marketingOfficer', 'name email phone')
-//       .populate('createdBy', 'name')
-//       .populate('paymentHistory.recordedBy', 'name')
-//       .populate('dueHistory.recordedBy', 'name');
+// Get Single Store
+app.get('/get-stores/:id', verifyToken, async (req, res) => {
+  try {
+    const store = await Store.findById(req.params.id)
+    console.log(store)
+    if (!store) {
+      return res.status(404).json({
+        success: false,
+        message: 'Store not found'
+      });
+    }
 
-//     if (!store) {
-//       return res.status(404).json({
-//         success: false,
-//         message: 'Store not found'
-//       });
-//     }
+    // Check if user has access (admin or assigned marketing officer)
+    if (req.user.role !== 'admin' && 
+        store.officers.marketingOfficer._id.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized access to this store'
+      });
+    }
 
-//     // Check if user has access (admin or assigned marketing officer)
-//     if (req.user.role !== 'admin' && 
-//         store.officers.marketingOfficer._id.toString() !== req.user.id) {
-//       return res.status(403).json({
-//         success: false,
-//         message: 'Unauthorized access to this store'
-//       });
-//     }
+    res.json({
+      success: true,
+      store
+    });
 
-//     res.json({
-//       success: true,
-//       store
-//     });
-
-//   } catch (error) {
-//     console.error('Get store error:', error);
-//     res.status(500).json({
-//       success: false,
-//       message: 'Server error',
-//       error: error.message
-//     });
-//   }
-// });
+  } catch (error) {
+    console.error('Get store error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
 
 // Update Store
 app.patch('/stores/:id', verifyToken, async (req, res) => {

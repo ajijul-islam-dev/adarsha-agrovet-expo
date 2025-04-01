@@ -4,9 +4,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { TextInput, Card, Text, Button, Menu, PaperProvider, Divider, useTheme } from "react-native-paper";
 import { ServicesProvider } from "../../provider/Provider.jsx";
 import { MaterialCommunityIcons as Icon } from "@expo/vector-icons";
+import { useLocalSearchParams } from "expo-router";
 
 const ProductStockScreen = () => {
   const theme = useTheme();
+  const { storeId,name } = useLocalSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
   const [sortVisible, setSortVisible] = useState(false);
   const [sortOption, setSortOption] = useState("price");
@@ -73,13 +75,60 @@ const ProductStockScreen = () => {
     );
   };
 
+  const renderItem = ({ item }) => (
+    <Card style={styles.productCard} mode="elevated">
+      <Card.Title
+        title={item.productName}
+        titleStyle={styles.title}
+        titleVariant="titleMedium"
+        right={() => (
+          <View style={[styles.stockBadge, { backgroundColor: theme.colors.surfaceVariant }]}>
+            <Text style={[styles.stockBadgeText, { color: theme.colors.primary }]}>
+              {item.stock} pcs
+            </Text>
+          </View>
+        )}
+      />
+      <Card.Content style={styles.cardContent}>
+        <View style={styles.productInfo}>
+          <Text style={[styles.price, { color: theme.colors.primary }]}>BDT {item.price}</Text>
+          <Text style={styles.packSize} numberOfLines={1} ellipsizeMode="tail">
+            {item.packSize} {item.unit} per pack
+          </Text>
+        </View>
+        <View style={{ marginLeft: 'auto', flexDirection: 'row', gap: 8 }}>
+          {storeId && (
+            <TouchableOpacity
+              onPress={() => openOrderModal(item)}
+              style={[styles.iconButton, { backgroundColor: theme.colors.primary }]}
+            >
+              <Icon name="cart-plus" size={20} color={theme.colors.onPrimary} />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            onPress={() => openUpdateModal(item)}
+            style={[styles.iconButton, { borderWidth: 1, borderColor: theme.colors.primary }]}
+          >
+            <Icon name="pencil" size={20} color={theme.colors.primary} />
+          </TouchableOpacity>
+        </View>
+      </Card.Content>
+    </Card>
+  );
+
   return (
     <PaperProvider>
       <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <View style={styles.header}>
-          <Text variant="headlineSmall" style={styles.headerText}>
-            Product Stock
-          </Text>
+          {storeId ? (
+            <Text variant="headlineSmall" style={styles.headerText}>
+              Order for {name}
+            </Text>
+          ) : (
+            <Text variant="headlineSmall" style={styles.headerText}>
+              Product Stock
+            </Text>
+          )}
         </View>
 
         <View style={styles.searchSortContainer}>
@@ -152,44 +201,7 @@ const ProductStockScreen = () => {
               data={products}
               keyExtractor={(item) => item._id}
               contentContainerStyle={styles.listContent}
-              renderItem={({ item }) => (
-                <Card style={styles.productCard} mode="elevated">
-                  <Card.Title
-                    title={item.productName}
-                    titleStyle={styles.title}
-                    titleVariant="titleMedium"
-                    right={() => (
-                      <View style={[styles.stockBadge, { backgroundColor: theme.colors.surfaceVariant }]}>
-                        <Text style={[styles.stockBadgeText, { color: theme.colors.primary }]}>
-                          {item.stock} pcs
-                        </Text>
-                      </View>
-                    )}
-                  />
-                  <Card.Content style={styles.cardContent}>
-                    <View style={styles.productInfo}>
-                      <Text style={[styles.price, { color: theme.colors.primary }]}>BDT {item.price}</Text>
-                      <Text style={styles.packSize} numberOfLines={1} ellipsizeMode="tail">
-                        {item.packSize} {item.unit} per pack
-                      </Text>
-                    </View>
-                    <View style={{ marginLeft: 'auto', flexDirection: 'row', gap: 8 }}>
-                      <TouchableOpacity
-                        onPress={() => openOrderModal(item)}
-                        style={[styles.iconButton, { backgroundColor: theme.colors.primary }]}
-                      >
-                        <Icon name="cart-plus" size={20} color={theme.colors.onPrimary} />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => openUpdateModal(item)}
-                        style={[styles.iconButton, { borderWidth: 1, borderColor: theme.colors.primary }]}
-                      >
-                        <Icon name="pencil" size={20} color={theme.colors.primary} />
-                      </TouchableOpacity>
-                    </View>
-                  </Card.Content>
-                </Card>
-              )}
+              renderItem={renderItem}
             />
           ) : (
             renderEmptyState()
@@ -206,7 +218,7 @@ const ProductStockScreen = () => {
           <View style={styles.modalBackdrop}>
             <View style={[styles.modalContainer, { backgroundColor: theme.colors.background }]}>
               <Text variant="titleLarge" style={styles.modalTitle}>
-                Order {selectedProduct?.productName}
+                {storeId ? `Order for Store ${storeId}` : 'Order'} - {selectedProduct?.productName}
               </Text>
 
               <View style={styles.modalSection}>
@@ -238,7 +250,6 @@ const ProductStockScreen = () => {
                 </View>
               </View>
 
-              {/* Side by Side Discount and Bonus Inputs */}
               <View style={styles.rowInputContainer}>
                 <View style={[styles.smallInputContainer, { flex: 1, marginRight: 8 }]}>
                   <Text variant="bodyMedium" style={styles.label}>
@@ -289,11 +300,16 @@ const ProductStockScreen = () => {
                 </Button>
                 <Button
                   mode="contained"
-                  onPress={() => setOrderModalVisible(false)}
+                  onPress={() => {
+                    if (storeId) {
+                      console.log(`Order placed for store ${storeId}`);
+                    }
+                    setOrderModalVisible(false);
+                  }}
                   style={styles.confirmButton}
                   icon="check"
                 >
-                  Confirm
+                  {storeId ? "Place Order" : "Confirm"}
                 </Button>
               </View>
             </View>
@@ -448,7 +464,6 @@ const ProductStockScreen = () => {
                 <Button
                   mode="contained"
                   onPress={() => {
-                    // Here you would typically save the changes to your backend
                     setEditModalVisible(false);
                   }}
                   style={styles.confirmButton}

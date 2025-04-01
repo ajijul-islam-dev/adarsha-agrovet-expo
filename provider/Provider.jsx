@@ -18,6 +18,7 @@ const AuthProvider = ({ children }) => {
   const [officers,setOfficers] = useState([]);
   const [stores, setStores] = useState([]);
   const [myStores, setMyStores] = useState([]);
+  const [currentStore,setCurrentStore] = useState({})
   const showMessage = (message, type = 'default') => {
     setSnackbar({ visible: true, message, type });
   };
@@ -155,7 +156,7 @@ const AuthProvider = ({ children }) => {
   
   
   
-  //__________________________Products cruds_________________________________
+//__________________________Products cruds_________________________________
   // Product CRUD Handlers
 
 const handleCreateProduct = async (values) => {
@@ -447,8 +448,9 @@ const handleGetAllStores = async (searchQuery = "", areaFilter = "") => {
 const handleGetStoreById = async (storeId) => {
   setLoading(true);
   try {
-    const res = await axiosSecure.get(`/stores/${storeId}`);
+    const res = await axiosSecure.get(`/get-stores/${storeId}`);
     if (res.data.success) {
+      setCurrentStore(res.data.store)
       return res.data.store;
     } else {
       showMessage('Failed to fetch store details', 'error');
@@ -607,7 +609,8 @@ useEffect(()=>{
     handleAddStoreDue,
     stores,
     handleGetMyStores,
-    myStores
+    myStores,
+    currentStore
   };
 
   return (
