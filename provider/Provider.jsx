@@ -180,14 +180,63 @@ const handleUpdateProduct = async (productId, values) => {
   setLoading(true);
   try {
     const res = await axiosSecure.patch(`/products/${productId}`, values);
+    
     if (res.data.success) {
       showMessage('Product updated successfully!', 'success');
-      router.push('/products');
+      return {
+        success: true,
+        product: res.data.product,
+        message: 'Product updated successfully'
+      };
     } else {
-      showMessage('Failed to update product', 'error');
+      showMessage(res.data.message || 'Failed to update product', 'error');
+      return {
+        success: false,
+        message: res.data.message || 'Failed to update product'
+      };
+    }
+  } catch (error) {
+    const errorMsg = getErrorMessage(error);
+    showMessage(errorMsg, 'error');
+    return {
+      success: false,
+      message: errorMsg
+    };
+  } finally {
+    setLoading(false);
+  }
+};
+
+// Product Stock Update Handler
+const handleUpdateProductStock = async (productId, quantity) => {
+  setLoading(true);
+  try {
+    const res = await axiosSecure.patch(`/products/${productId}/stock`, { quantity });
+    
+    if (res.data.success) {
+      showMessage(res.data.message, 'success');
+      
+      // Update local products state to reflect the change
+      setProducts(prevProducts => 
+        prevProducts.map(product => 
+          product._id === productId 
+            ? { ...product, stock: res.data.product.newStock } 
+            : product
+        )
+      );
+      
+      return {
+        success: true,
+        newStock: res.data.product.newStock,
+        previousStock: res.data.product.previousStock
+      };
+    } else {
+      showMessage(res.data.message || 'Failed to update stock', 'error');
+      return { success: false };
     }
   } catch (error) {
     showMessage(getErrorMessage(error), 'error');
+    return { success: false };
   } finally {
     setLoading(false);
   }
@@ -582,7 +631,9 @@ useEffect(()=>{
   handleGetAllOfficers();
   handleGetAllStores();
   handleGetMyStores();
-},[])
+},[]);
+
+
 
   const value = {
     loading, 
@@ -610,7 +661,9 @@ useEffect(()=>{
     stores,
     handleGetMyStores,
     myStores,
-    currentStore
+    currentStore,
+    handleUpdateProductStock,
+    handleUpdateProduct
   };
 
   return (

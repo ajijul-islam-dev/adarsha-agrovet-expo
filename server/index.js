@@ -414,6 +414,80 @@ app.patch('/products/:id', verifyToken, async (req, res) => {
   }
 });
 
+
+app.patch('/products/:id/stock', verifyToken, async (req, res) => {
+  try {
+    const { quantity } = req.body;
+    
+    // Validate input
+    if (typeof quantity !== 'number') {
+      return res.status(400).json({
+        success: false,
+        message: 'Quantity must be a number'
+      });
+    }
+
+    if (quantity === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Quantity cannot be zero'
+      });
+    }
+
+    // Find the product
+    const product = await Product.findById(req.params.id);
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
+    }
+
+    // Calculate new stock
+    const newStock = product.stock + quantity;
+
+    // Validate stock won't go negative
+    if (newStock < 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Insufficient stock. Cannot reduce stock below zero',
+        currentStock: product.stock,
+        attemptedReduction: Math.abs(quantity)
+      });
+    }
+
+    // Update the product stock
+    const updatedProduct = await Product.findByIdAndUpdate(
+      req.params.id,
+      { stock: newStock },
+      { new: true }
+    );
+
+    res.json({
+      success: true,
+      message: quantity > 0 
+        ? `Stock increased by ${quantity}` 
+        : `Stock decreased by ${Math.abs(quantity)}`,
+      product: {
+        id: updatedProduct._id,
+        name: updatedProduct.productName,
+        previousStock: product.stock,
+        newStock: updatedProduct.stock,
+        change: quantity
+      }
+    });
+
+  } catch (error) {
+    console.error('Update product stock error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update product stock',
+      error: error.message
+    });
+  }
+});
+
+
 // Delete Product
 app.delete('/products/:id', verifyToken, async (req, res) => {
   if (req.user.role !== 'admin') {

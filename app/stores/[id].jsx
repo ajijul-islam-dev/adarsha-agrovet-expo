@@ -406,7 +406,13 @@ const StoreDetailsScreen = () => {
               <Button
                 mode="contained"
                 icon="cart-plus"
-                onPress={() => setOrderProducts([])}
+                onPress={() => router.push({
+                  pathname : '/product-stock',
+                  params : {
+                    storeId : currentStore._id,
+                    name : currentStore.storeName
+                  }
+                })}
                 style={{ marginTop: 16 }}
               >
                 Create Order
@@ -511,32 +517,13 @@ const StoreDetailsScreen = () => {
             left={() => (
               <MaterialCommunityIcons
                 name="store"
-                size={28}
+                size={35}
                 color={theme.colors.primary}
                 style={styles.storeIcon}
               />
             )}
-            right={() => (
-              <View style={[
-                styles.dueBadge,
-                {
-                  backgroundColor: currentStore?.totalDue > 0
-                    ? theme.colors.errorContainer
-                    : theme.colors.surfaceVariant
-                }
-              ]}>
-                <Text style={[
-                  styles.dueBadgeText,
-                  {
-                    color: currentStore?.totalDue > 0
-                      ? theme.colors.onErrorContainer
-                      : theme.colors.onSurfaceVariant
-                  }
-                ]}>
-                  {formatCurrency(currentStore?.totalDue || 0)}
-                </Text>
-              </View>
-            )}
+            
+          
           />
           <Card.Content>
             <View style={styles.storeInfoRow}>

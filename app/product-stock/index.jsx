@@ -1,5 +1,5 @@
 import React, { useState, useRef, useContext, useEffect } from "react";
-import { View, FlatList, StyleSheet, Modal, TouchableOpacity, ActivityIndicator } from "react-native";
+import { View, FlatList, StyleSheet, Modal, TouchableOpacity, ActivityIndicator, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { TextInput, Card, Text, Button, Menu, PaperProvider, Divider, useTheme } from "react-native-paper";
 import { ServicesProvider } from "../../provider/Provider.jsx";
@@ -8,7 +8,7 @@ import { useLocalSearchParams } from "expo-router";
 
 const ProductStockScreen = () => {
   const theme = useTheme();
-  const { storeId,name } = useLocalSearchParams();
+  const { storeId, name } = useLocalSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
   const [sortVisible, setSortVisible] = useState(false);
   const [sortOption, setSortOption] = useState("price");
@@ -22,8 +22,17 @@ const ProductStockScreen = () => {
   const [discountPercentage, setDiscountPercentage] = useState(0);
   const [bonusQuantity, setBonusQuantity] = useState(0);
   const [editedProduct, setEditedProduct] = useState(null);
+  const [updatingStock, setUpdatingStock] = useState(false);
+  const [updatingProduct, setUpdatingProduct] = useState(false);
 
-  const { products, loading, handleGetAllProducts } = useContext(ServicesProvider);
+  const { 
+    products, 
+    loading, 
+    handleGetAllProducts, 
+    handleUpdateProductStock,
+    handleUpdateProduct,
+    showMessage
+  } = useContext(ServicesProvider);
 
   useEffect(() => {
     handleGetAllProducts(searchQuery, sortOption);
@@ -52,6 +61,56 @@ const ProductStockScreen = () => {
     if (!selectedProduct) return 0;
     const discountedPrice = selectedProduct.price * (1 - discountPercentage / 100);
     return (discountedPrice * orderQuantity).toFixed(2);
+  };
+
+  const handleStockUpdate = async () => {
+    if (!selectedProduct) return;
+    
+    setUpdatingStock(true);
+    try {
+      const quantityChange = orderQuantity - selectedProduct.stock;
+      const result = await handleUpdateProductStock(
+        selectedProduct._id, 
+        quantityChange
+      );
+
+      if (result.success) {
+        showMessage(`Stock updated to ${result.newStock}`, 'success');
+        setUpdateModalVisible(false);
+        handleGetAllProducts(searchQuery, sortOption);
+      }
+    } catch (error) {
+      showMessage('Failed to update stock', 'error');
+      console.error("Stock update error:", error);
+    } finally {
+      setUpdatingStock(false);
+    }
+  };
+
+  const handleProductUpdate = async () => {
+    if (!editedProduct) return;
+    
+    setUpdatingProduct(true);
+    try {
+      const success = await handleUpdateProduct(editedProduct._id, {
+        productName: editedProduct.productName,
+        price: editedProduct.price,
+        packSize: editedProduct.packSize,
+        unit: editedProduct.unit,
+        stock: editedProduct.stock
+      });
+      
+      if (success) {
+        showMessage('Product updated successfully', 'success');
+        setEditModalVisible(false);
+        handleGetAllProducts(searchQuery, sortOption);
+      }
+    } catch (error) {
+      showMessage('Failed to update product', 'error');
+      console.error("Product update error:", error);
+    } finally {
+      setUpdatingProduct(false);
+    }
   };
 
   const renderEmptyState = () => {
@@ -218,7 +277,7 @@ const ProductStockScreen = () => {
           <View style={styles.modalBackdrop}>
             <View style={[styles.modalContainer, { backgroundColor: theme.colors.background }]}>
               <Text variant="titleLarge" style={styles.modalTitle}>
-                {storeId ? `Order for Store ${storeId}` : 'Order'} - {selectedProduct?.productName}
+                {storeId ? `Order ${selectedProduct?.productName} for ${name}` : 'Order'} 
               </Text>
 
               <View style={styles.modalSection}>
@@ -388,11 +447,16 @@ const ProductStockScreen = () => {
                 </Button>
                 <Button
                   mode="contained"
-                  onPress={() => setUpdateModalVisible(false)}
+                  onPress={handleStockUpdate}
                   style={styles.confirmButton}
-                  icon="check"
+                  icon={updatingStock ? null : "check"}
+                  disabled={updatingStock}
                 >
-                  Update
+                  {updatingStock ? (
+                    <ActivityIndicator color={theme.colors.onPrimary} />
+                  ) : (
+                    "Update"
+                  )}
                 </Button>
               </View>
             </View>
@@ -463,13 +527,16 @@ const ProductStockScreen = () => {
                 </Button>
                 <Button
                   mode="contained"
-                  onPress={() => {
-                    setEditModalVisible(false);
-                  }}
+                  onPress={handleProductUpdate}
                   style={styles.confirmButton}
-                  icon="content-save"
+                  icon={updatingProduct ? null : "content-save"}
+                  disabled={updatingProduct}
                 >
-                  Save
+                  {updatingProduct ? (
+                    <ActivityIndicator color={theme.colors.onPrimary} />
+                  ) : (
+                    "Save"
+                  )}
                 </Button>
               </View>
             </View>
