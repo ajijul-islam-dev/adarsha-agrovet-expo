@@ -7,6 +7,8 @@ import bcrypt from 'bcryptjs';
 import User from './models/User.js';
 import Product from './models/Product.js'
 import Store from './models/Store.js'
+import Order from './models/Order.js';
+
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -1102,6 +1104,353 @@ app.get('/stores/my-stores',verifyToken, async (req, res) => {
   }
 });
 
+// _____________________Orders___________________________
+// Order Routes
+
+// Create or update draft order
+app.post('/api/orders/draft', verifyToken, async (req, res) => {
+  try {
+    const { storeId, product, quantity, bonusQuantity, discountPercentage, notes } = req.body;
+
+    // Validate required fields
+    if (!storeId || !product || !quantity) {
+      return res.status(400).json({
+        success: false,
+        message: 'Store ID, product, and quantity are required'
+      });
+    }
+
+    // Check if store exists
+    const store = await Store.findById(storeId);
+    if (!store) {
+      return res.status(404).json({
+        success: false,
+        message: 'Store not found'
+      });
+    }
+
+    // Check if product exists
+    const productExists = await Product.findById(product.id);
+    if (!productExists) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
+    }
+
+    // Check if draft order already exists for this store
+    let order = await Order.findOne({
+      store: storeId,
+      status: 'draft',
+      createdBy: req.user.id
+    });
+
+    if (order) {
+      // Update existing draft
+      const existingProductIndex = order.products.findIndex(
+        p => p.product.toString() === product.id
+      );
+
+      if (existingProductIndex >= 0) {
+        // Update existing product in order
+        order.products[existingProductIndex].quantity = quantity;
+        order.products[existingProductIndex].bonusQuantity = bonusQuantity || 0;
+        order.products[existingProductIndex].discountPercentage = discountPercentage || 0;
+      } else {
+        // Add new product to order
+        order.products.push({
+          product: product.id,
+          name: product.name,
+          price: product.price,
+          packSize: product.packSize,
+          unit: product.unit,
+          quantity,
+          bonusQuantity: bonusQuantity || 0,
+          discountPercentage: discountPercentage || 0
+        });
+      }
+
+      order.notes = notes || order.notes;
+      order.updatedAt = new Date();
+    } else {
+      // Create new draft order
+      order = new Order({
+        store: storeId,
+        products: [{
+          product: product.id,
+          name: product.name,
+          price: product.price,
+          packSize: product.packSize,
+          unit: product.unit,
+          quantity,
+          bonusQuantity: bonusQuantity || 0,
+          discountPercentage: discountPercentage || 0
+        }],
+        status: 'draft',
+        notes: notes || `Order for ${store.storeName}`,
+        createdBy: req.user.id,
+        marketingOfficer: req.user.id
+      });
+    }
+
+    await order.save();
+
+    res.status(order.isNew ? 201 : 200).json({
+      success: true,
+      message: order.isNew ? 'Draft order created' : 'Draft order updated',
+      order
+    });
+
+  } catch (error) {
+    console.error('Draft order error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to save draft order',
+      error: error.message
+    });
+  }
+});
+
+// Update draft order
+app.patch('/api/orders/:id', verifyToken, async (req, res) => {
+  try {
+    const { product, quantity, bonusQuantity, discountPercentage, notes } = req.body;
+
+    // Find the existing order
+    const order = await Order.findById(req.params.id);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    // Check permissions (admin or marketing officer who created it)
+    if (req.user.role !== 'admin' && order.createdBy.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized to update this order'
+      });
+    }
+
+    // Verify it's a draft
+    if (order.status !== 'draft') {
+      return res.status(400).json({
+        success: false,
+        message: 'Only draft orders can be updated'
+      });
+    }
+
+    // Check if product exists
+    const productExists = await Product.findById(product.id);
+    if (!productExists) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
+    }
+
+    // Find existing product in order or add new one
+    const existingProductIndex = order.products.findIndex(
+      p => p.product.toString() === product.id
+    );
+
+    if (existingProductIndex >= 0) {
+      // Update existing product
+      order.products[existingProductIndex].quantity = quantity;
+      order.products[existingProductIndex].bonusQuantity = bonusQuantity || 0;
+      order.products[existingProductIndex].discountPercentage = discountPercentage || 0;
+    } else {
+      // Add new product
+      order.products.push({
+        product: product.id,
+        name: product.name,
+        price: product.price,
+        packSize: product.packSize,
+        unit: product.unit,
+        quantity,
+        bonusQuantity: bonusQuantity || 0,
+        discountPercentage: discountPercentage || 0
+      });
+    }
+
+    // Update notes if provided
+    if (notes) {
+      order.notes = notes;
+    }
+
+    order.updatedAt = new Date();
+    await order.save();
+
+    res.json({
+      success: true,
+      message: 'Draft order updated',
+      order
+    });
+
+  } catch (error) {
+    console.error('Update draft order error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update draft order',
+      error: error.message
+    });
+  }
+});
+
+// Submit draft order
+app.post('/api/orders/:id/submit', verifyToken, async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    // Check permissions (admin or marketing officer who created it)
+    if (req.user.role !== 'admin' && order.createdBy.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized to submit this order'
+      });
+    }
+
+    // Verify it's a draft
+    if (order.status !== 'draft') {
+      return res.status(400).json({
+        success: false,
+        message: 'Only draft orders can be submitted'
+      });
+    }
+
+    // Verify it has products
+    if (order.products.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot submit empty order'
+      });
+    }
+
+    // Update status and save
+    order.status = 'submitted';
+    order.submittedAt = new Date();
+    await order.save();
+
+    res.json({
+      success: true,
+      message: 'Order submitted successfully',
+      order
+    });
+
+  } catch (error) {
+    console.error('Submit order error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to submit order',
+      error: error.message
+    });
+  }
+});
+
+// Get draft orders for a store
+app.get('/api/orders/draft', verifyToken, async (req, res) => {
+  try {
+    const { storeId } = req.query;
+    
+    if (!storeId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Store ID is required'
+      });
+    }
+
+    const order = await Order.findOne({
+      store: storeId,
+      status: 'draft',
+      createdBy: req.user.id
+    }).populate('products.product', 'productName price packSize unit');
+
+    res.json({
+      success: true,
+      order: order || null
+    });
+
+  } catch (error) {
+    console.error('Get draft order error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch draft order',
+      error: error.message
+    });
+  }
+});
+
+// Get all orders with filtering
+app.get('/api/orders', verifyToken, async (req, res) => {
+  try {
+    const { storeId, status, fromDate, toDate, limit = 10, page = 1 } = req.query;
+    
+    let query = {};
+    
+    // For non-admin users, only show their orders
+    if (req.user.role !== 'admin') {
+      query.createdBy = req.user.id;
+    }
+    
+    // Store filter
+    if (storeId) {
+      query.store = storeId;
+    }
+    
+    // Status filter
+    if (status) {
+      query.status = status;
+    }
+    
+    // Date range filter
+    if (fromDate || toDate) {
+      query.createdAt = {};
+      if (fromDate) query.createdAt.$gte = new Date(fromDate);
+      if (toDate) query.createdAt.$lte = new Date(toDate);
+    }
+
+    // Pagination settings
+    const skip = (page - 1) * limit;
+
+    const orders = await Order.find(query)
+      .populate('store', 'storeName proprietorName')
+      .populate('products.product', 'productName price packSize unit')
+      .populate('createdBy', 'name')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const totalOrders = await Order.countDocuments(query);
+    const totalPages = Math.ceil(totalOrders / limit);
+
+    res.json({
+      success: true,
+      count: orders.length,
+      orders,
+      pagination: {
+        totalOrders,
+        totalPages,
+        currentPage: page,
+        perPage: limit
+      }
+    });
+
+  } catch (error) {
+    console.error('Get orders error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch orders',
+      error: error.message
+    });
+  }
+});
 
 
 // Start server

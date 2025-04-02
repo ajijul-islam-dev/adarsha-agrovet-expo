@@ -19,6 +19,11 @@ const AuthProvider = ({ children }) => {
   const [stores, setStores] = useState([]);
   const [myStores, setMyStores] = useState([]);
   const [currentStore,setCurrentStore] = useState({})
+  const [orders, setOrders] = useState([]);
+  const [draftOrder, setDraftOrder] = useState(null);
+  
+  
+  
   const showMessage = (message, type = 'default') => {
     setSnackbar({ visible: true, message, type });
   };
@@ -625,6 +630,104 @@ const handleGetMyStores = async (searchQuery = "", areaFilter = "") => {
 
 
 
+// Create or update draft order
+const handleCreateOrUpdateDraftOrder = async (orderData) => {
+  setLoading(true);
+  try {
+    const res = await axiosSecure.post('/api/orders/draft', orderData);
+    
+    if (res.data.success) {
+      showMessage(res.data.message, 'success');
+      setDraftOrder(res.data.order);
+      return {
+        success: true,
+        order: res.data.order
+      };
+    } else {
+      showMessage(res.data.message || 'Failed to update draft order', 'error');
+      return { success: false };
+    }
+  } catch (error) {
+    showMessage(getErrorMessage(error), 'error');
+    return { success: false };
+  } finally {
+    setLoading(false);
+  }
+};
+
+// Submit draft order
+const handleSubmitDraftOrder = async (orderId) => {
+  setLoading(true);
+  try {
+    const res = await axiosSecure.post(`/api/orders/${orderId}/submit`);
+    
+    if (res.data.success) {
+      showMessage('Order submitted successfully!', 'success');
+      setDraftOrder(null);
+      return {
+        success: true,
+        order: res.data.order
+      };
+    } else {
+      showMessage(res.data.message || 'Failed to submit order', 'error');
+      return { success: false };
+    }
+  } catch (error) {
+    showMessage(getErrorMessage(error), 'error');
+    return { success: false };
+  } finally {
+    setLoading(false);
+  }
+};
+
+// Get draft orders for store
+const handleGetStoreDrafts = async (storeId) => {
+  setLoading(true);
+  try {
+    const res = await axiosSecure.get(`/api/orders/draft?storeId=${storeId}`);
+    
+    if (res.data.success) {
+      return {
+        success: true,
+        order: res.data.order
+      };
+    } else {
+      showMessage(res.data.message || 'Failed to fetch drafts', 'error');
+      return { success: false };
+    }
+  } catch (error) {
+    showMessage(getErrorMessage(error), 'error');
+    return { success: false };
+  } finally {
+    setLoading(false);
+  }
+};
+
+// Get all orders
+const handleGetAllOrders = async (status = '') => {
+  setLoading(true);
+  try {
+    const url = status ? `/api/orders?status=${status}` : '/api/orders';
+    const res = await axiosSecure.get(url);
+    
+    if (res.data.success) {
+      setOrders(res.data.orders);
+      return {
+        success: true,
+        orders: res.data.orders
+      };
+    } else {
+      showMessage(res.data.message || 'Failed to fetch orders', 'error');
+      return { success: false };
+    }
+  } catch (error) {
+    showMessage(getErrorMessage(error), 'error');
+    return { success: false };
+  } finally {
+    setLoading(false);
+  }
+};
+
   
 useEffect(()=>{
   handleGetAllProducts();
@@ -663,7 +766,13 @@ useEffect(()=>{
     myStores,
     currentStore,
     handleUpdateProductStock,
-    handleUpdateProduct
+    handleUpdateProduct,
+    orders,
+  draftOrder,
+  handleCreateOrUpdateDraftOrder,
+  handleSubmitDraftOrder,
+  handleGetStoreDrafts,
+  handleGetAllOrders,
   };
 
   return (

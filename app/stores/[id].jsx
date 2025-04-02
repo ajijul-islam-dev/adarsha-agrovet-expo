@@ -169,7 +169,7 @@ const StoreDetailsScreen = () => {
             style={styles.quickActionButton}
             onPress={() => router.push({
                 pathname: "/product-stock",
-                params: { storeId: "store_123",name : currentStore.storeName }
+                params: { storeId: currentStore._id,name : currentStore.storeName }
               })
             }
           >
