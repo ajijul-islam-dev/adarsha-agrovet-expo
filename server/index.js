@@ -1387,10 +1387,23 @@ app.get('/api/orders/draft', verifyToken, async (req, res) => {
   }
 });
 
-// Get all orders with filtering
+/// _____________________Orders___________________________
+// Order Routes
+
+// Enhanced Get all orders with filtering, searching and sorting
 app.get('/api/orders', verifyToken, async (req, res) => {
   try {
-    const { storeId, status, fromDate, toDate, limit = 10, page = 1 } = req.query;
+    const { 
+      storeId, 
+      status, 
+      fromDate, 
+      toDate, 
+      search,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+      limit = 10, 
+      page = 1 
+    } = req.query;
     
     let query = {};
     
@@ -1416,16 +1429,50 @@ app.get('/api/orders', verifyToken, async (req, res) => {
       if (toDate) query.createdAt.$lte = new Date(toDate);
     }
 
+    // Search filter
+    if (search) {
+      const searchRegex = new RegExp(search, 'i');
+      query.$or = [
+        { 'store.storeName': searchRegex },
+        { 'products.name': searchRegex },
+        { notes: searchRegex }
+      ];
+    }
+
+    // Sort options
+    const sortOptions = {};
+    if (sortBy === 'amount') {
+      // Special case for sorting by calculated amount
+      // We'll handle this after fetching the data
+    } else {
+      sortOptions[sortBy] = sortOrder === 'asc' ? 1 : -1;
+    }
+
     // Pagination settings
     const skip = (page - 1) * limit;
 
-    const orders = await Order.find(query)
+    let orders = await Order.find(query)
       .populate('store', 'storeName proprietorName')
       .populate('products.product', 'productName price packSize unit')
       .populate('createdBy', 'name')
-      .sort({ createdAt: -1 })
+      .sort(sortBy === 'amount' ? { createdAt: -1 } : sortOptions)
       .skip(skip)
       .limit(parseInt(limit));
+
+    // Calculate total amount for each order and sort if needed
+    if (sortBy === 'amount') {
+      orders = orders.map(order => {
+        const totalAmount = order.products.reduce((sum, product) => {
+          const discountedPrice = product.price * (1 - (product.discountPercentage || 0) / 100);
+          return sum + (discountedPrice * product.quantity);
+        }, 0);
+        return { ...order.toObject(), totalAmount };
+      }).sort((a, b) => {
+        return sortOrder === 'asc' 
+          ? a.totalAmount - b.totalAmount 
+          : b.totalAmount - a.totalAmount;
+      });
+    }
 
     const totalOrders = await Order.countDocuments(query);
     const totalPages = Math.ceil(totalOrders / limit);
@@ -1447,6 +1494,185 @@ app.get('/api/orders', verifyToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch orders',
+      error: error.message
+    });
+  }
+});
+
+// Get order statistics (for dashboard)
+app.get('/api/orders/stats', verifyToken, async (req, res) => {
+  try {
+    let matchQuery = {};
+    
+    // For non-admin users, only show their orders
+    if (req.user.role !== 'admin') {
+      matchQuery.createdBy = req.user.id;
+    }
+
+    const stats = await Order.aggregate([
+      { $match: matchQuery },
+      {
+        $group: {
+          _id: null,
+          totalOrders: { $sum: 1 },
+          totalAmount: {
+            $sum: {
+              $reduce: {
+                input: "$products",
+                initialValue: 0,
+                in: {
+                  $add: [
+                    "$$value",
+                    { $multiply: ["$$this.price", "$$this.quantity"] }
+                  ]
+                }
+              }
+            }
+          },
+          byStatus: {
+            $push: {
+              status: "$status",
+              amount: {
+                $reduce: {
+                  input: "$products",
+                  initialValue: 0,
+                  in: {
+                    $add: [
+                      "$$value",
+                      { $multiply: ["$$this.price", "$$this.quantity"] }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        $project: {
+          totalOrders: 1,
+          totalAmount: 1,
+          statusStats: {
+            $arrayToObject: {
+              $map: {
+                input: "$byStatus",
+                as: "stat",
+                in: {
+                  k: "$$stat.status",
+                  v: {
+                    count: { $sum: 1 },
+                    amount: "$$stat.amount"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    ]);
+
+    res.json({
+      success: true,
+      stats: stats[0] || {
+        totalOrders: 0,
+        totalAmount: 0,
+        statusStats: {}
+      }
+    });
+
+  } catch (error) {
+    console.error('Get order stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch order statistics',
+      error: error.message
+    });
+  }
+});
+
+// Get orders summary by date (for charts)
+app.get('/api/orders/summary', verifyToken, async (req, res) => {
+  try {
+    const { days = 30 } = req.query;
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - parseInt(days));
+
+    let matchQuery = { 
+      createdAt: { $gte: startDate } 
+    };
+    
+    // For non-admin users, only show their orders
+    if (req.user.role !== 'admin') {
+      matchQuery.createdBy = req.user.id;
+    }
+
+    const summary = await Order.aggregate([
+      { $match: matchQuery },
+      {
+        $project: {
+          date: {
+            $dateToString: { format: "%Y-%m-%d", date: "$createdAt" }
+          },
+          amount: {
+            $sum: {
+              $map: {
+                input: "$products",
+                as: "product",
+                in: { $multiply: ["$$product.price", "$$product.quantity"] }
+              }
+            }
+          },
+          status: 1
+        }
+      },
+      {
+        $group: {
+          _id: "$date",
+          totalOrders: { $sum: 1 },
+          totalAmount: { $sum: "$amount" },
+          statusCounts: {
+            $push: {
+              status: "$status",
+              amount: "$amount"
+            }
+          }
+        }
+      },
+      { $sort: { _id: 1 } },
+      {
+        $project: {
+          date: "$_id",
+          totalOrders: 1,
+          totalAmount: 1,
+          statusCounts: {
+            $arrayToObject: {
+              $map: {
+                input: "$statusCounts",
+                as: "stat",
+                in: {
+                  k: "$$stat.status",
+                  v: {
+                    count: { $sum: 1 },
+                    amount: "$$stat.amount"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    ]);
+
+    res.json({
+      success: true,
+      summary
+    });
+
+  } catch (error) {
+    console.error('Get order summary error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch order summary',
       error: error.message
     });
   }
