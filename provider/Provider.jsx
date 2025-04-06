@@ -630,105 +630,317 @@ const handleGetMyStores = async (searchQuery = "", areaFilter = "") => {
 
 
 
-// Create or update draft order
-const handleCreateOrUpdateDraftOrder = async (orderData) => {
-  setLoading(true);
-  try {
-    const res = await axiosSecure.post('/api/orders/draft', orderData);
-    
-    if (res.data.success) {
-      showMessage(res.data.message, 'success');
-      setDraftOrder(res.data.order);
-      return {
-        success: true,
-        order: res.data.order
-      };
-    } else {
-      showMessage(res.data.message || 'Failed to update draft order', 'error');
-      return { success: false };
-    }
-  } catch (error) {
-    showMessage(getErrorMessage(error), 'error');
-    return { success: false };
-  } finally {
-    setLoading(false);
-  }
-};
+  // Order Handlers (updated)
+  const calculateOrderAmounts = (order) => {
+    if (!order?.products) return order;
 
-// Submit draft order
-const handleSubmitDraftOrder = async (orderId) => {
-  setLoading(true);
-  try {
-    const res = await axiosSecure.post(`/api/orders/${orderId}/submit`);
-    
-    if (res.data.success) {
-      showMessage('Order submitted successfully!', 'success');
-      setDraftOrder(null);
+    const productsWithTotals = order.products.map(product => {
+      const discountedPrice = product.price * (1 - (product.discountPercentage || 0) / 100);
       return {
-        success: true,
-        order: res.data.order
+        ...product,
+        totalAmount: product.price * product.quantity,
+        finalAmount: discountedPrice * product.quantity,
+        discountAmount: (product.price - discountedPrice) * product.quantity
       };
-    } else {
-      showMessage(res.data.message || 'Failed to submit order', 'error');
-      return { success: false };
-    }
-  } catch (error) {
-    showMessage(getErrorMessage(error), 'error');
-    return { success: false };
-  } finally {
-    setLoading(false);
-  }
-};
+    });
 
-// Get draft orders for store
-const handleGetStoreDrafts = async (storeId) => {
-  setLoading(true);
-  try {
-    const res = await axiosSecure.get(`/api/orders/draft?storeId=${storeId}`);
-    
-    if (res.data.success) {
-      return {
-        success: true,
-        order: res.data.order
-      };
-    } else {
-      showMessage(res.data.message || 'Failed to fetch drafts', 'error');
-      return { success: false };
-    }
-  } catch (error) {
-    showMessage(getErrorMessage(error), 'error');
-    return { success: false };
-  } finally {
-    setLoading(false);
-  }
-};
+    const subtotal = productsWithTotals.reduce((sum, p) => sum + p.totalAmount, 0);
+    const total = productsWithTotals.reduce((sum, p) => sum + p.finalAmount, 0);
+    const totalDiscount = subtotal - total;
 
-// Get all orders
-const handleGetAllOrders = async (status = '') => {
-  setLoading(true);
-  try {
-    const url = status ? `/api/orders?status=${status}` : '/api/orders';
-    const res = await axiosSecure.get(url);
-    
-    if (res.data.success) {
-      setOrders(res.data.orders);
-      return {
-        success: true,
-        orders: res.data.orders
-      };
-    } else {
-      showMessage(res.data.message || 'Failed to fetch orders', 'error');
+    return {
+      ...order,
+      products: productsWithTotals,
+      subtotal,
+      total,
+      totalDiscount,
+      paymentMethod: order.paymentMethod || 'cash'
+    };
+  };
+
+  const handleGetOrCreateDraftOrder = async (storeId) => {
+    if (!storeId) {
+      showMessage('Store ID is required', 'error');
       return { success: false };
     }
-  } catch (error) {
-    showMessage(getErrorMessage(error), 'error');
-    return { success: false };
-  } finally {
-    setLoading(false);
-  }
-};
+
+    setLoading(true);
+    try {
+      const res = await axiosSecure.get(`/api/orders/draft?storeId=${storeId}`);
+      
+      let order = res.data.success ? res.data.order : null;
+      
+      if (!order) {
+        const createRes = await axiosSecure.post('/api/orders/draft', {
+          storeId,
+          status: 'draft',
+          paymentMethod: 'cash',
+          products: []
+        });
+        
+        if (createRes.data.success) {
+          order = createRes.data.order;
+        }
+      }
+
+      if (order) {
+        const enhancedOrder = calculateOrderAmounts(order);
+        setDraftOrder(enhancedOrder);
+        return { success: true, order: enhancedOrder };
+      }
+      
+      throw new Error('Failed to get or create draft order');
+    } catch (error) {
+      showMessage(getErrorMessage(error), 'error');
+      return { success: false };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddToDraftOrder = async (product, quantity, discount = 0, bonus = 0) => {
+    if (!draftOrder) {
+      showMessage('No draft order exists', 'error');
+      return { success: false };
+    }
+
+    setLoading(true);
+    try {
+      const res = await axiosSecure.patch(`/api/orders/${draftOrder._id}`, {
+        product: {
+          id: product._id,
+          name: product.productName,
+          price: product.price,
+          packSize: product.packSize,
+          unit: product.unit
+        },
+        quantity,
+        discountPercentage: discount,
+        bonusQuantity: bonus
+      });
+
+      if (res.data.success) {
+        const updatedOrder = calculateOrderAmounts(res.data.order);
+        setDraftOrder(updatedOrder);
+        return { success: true, order: updatedOrder };
+      }
+      
+      throw new Error('Failed to update order');
+    } catch (error) {
+      showMessage(getErrorMessage(error), 'error');
+      return { success: false };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateDraftPaymentMethod = async (method) => {
+    if (!draftOrder) {
+      showMessage('No draft order exists', 'error');
+      return { success: false };
+    }
+
+    setLoading(true);
+    try {
+      const res = await axiosSecure.patch(`/api/orders/${draftOrder._id}/payment`, {
+        paymentMethod: method
+      });
+
+      if (res.data.success) {
+        const updatedOrder = {
+          ...draftOrder,
+          paymentMethod: method
+        };
+        setDraftOrder(updatedOrder);
+        return { success: true, order: updatedOrder };
+      }
+      
+      throw new Error('Failed to update payment method');
+    } catch (error) {
+      showMessage(getErrorMessage(error), 'error');
+      return { success: false };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmitDraftOrder = async () => {
+    if (!draftOrder) {
+      showMessage('No draft order to submit', 'error');
+      return { success: false };
+    }
+
+    setLoading(true);
+    try {
+      const res = await axiosSecure.post(`/api/orders/${draftOrder._id}/submit`);
+
+      if (res.data.success) {
+        showMessage('Order submitted successfully!', 'success');
+        setDraftOrder(null);
+        await handleGetAllOrders();
+        return { success: true, order: res.data.order };
+      }
+      
+      throw new Error('Failed to submit order');
+    } catch (error) {
+      showMessage(getErrorMessage(error), 'error');
+      return { success: false };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGetAllOrders = async (filters = {}) => {
+    setLoading(true);
+    try {
+      const queryParams = new URLSearchParams();
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value) queryParams.append(key, value);
+      });
+
+      const res = await axiosSecure.get(`/api/orders?${queryParams.toString()}`);
+      if (res.data.success) {
+        
+        const ordersWithTotals = res.data.orders.map(calculateOrderAmounts);
+        setOrders(ordersWithTotals);
+        console.log(res.data.orders)
+        return { 
+          success: true, 
+          orders: ordersWithTotals,
+          pagination: res.data.pagination
+        };
+      }
+      
+      throw new Error('Failed to fetch orders');
+    } catch (error) {
+      showMessage(getErrorMessage(error), 'error');
+      return { success: false, orders: [] };
+    } finally {
+      setLoading(false);
+    }
+  };
 
   
+  
+  // Order Handlers
+const handleGetOrderById = async (orderId) => {
+  setLoading(true);
+  try {
+    const res = await axiosSecure.get(`/api/orders/${orderId}`);
+    if (res.data.success) {
+      // Calculate amounts including discounts and bonuses
+      const order = res.data.order;
+      const enhancedOrder = {
+        ...order,
+        products: order.products.map(product => ({
+          ...product,
+          totalAmount: product.price * product.quantity,
+          finalAmount: (product.price * (1 - (product.discountPercentage || 0) / 100)) * product.quantity,
+          bonusQuantity: product.bonusQuantity || 0
+        })),
+        orderTotal: order.products.reduce((sum, p) => sum + (p.price * p.quantity), 0),
+        orderFinalTotal: order.products.reduce(
+          (sum, p) => sum + ((p.price * (1 - (p.discountPercentage || 0) / 100)) * p.quantity, 0
+        ))
+      };
+      return { success: true, order: enhancedOrder };
+    } else {
+      showMessage('Failed to fetch order', 'error');
+      return { success: false };
+    }
+  } catch (error) {
+    showMessage(getErrorMessage(error), 'error');
+    return { success: false };
+  } finally {
+    setLoading(false);
+  }
+};
+
+const handleApproveOrder = async (orderId) => {
+  setLoading(true);
+  try {
+    const res = await axiosSecure.patch(`/api/orders/${orderId}/approve`);
+    if (res.data.success) {
+      showMessage('Order approved successfully!', 'success');
+      // Update local orders state
+      setOrders(prev => prev.map(o => 
+        o._id === orderId ? { ...o, status: 'approved' } : o
+      ));
+      return { success: true };
+    }
+    throw new Error(res.data.message || 'Approval failed');
+  } catch (error) {
+    showMessage(getErrorMessage(error), 'error');
+    return { success: false };
+  } finally {
+    setLoading(false);
+  }
+};
+
+const handleRejectOrder = async (orderId, reason) => {
+  setLoading(true);
+  try {
+    const res = await axiosSecure.patch(`/api/orders/${orderId}/reject`, { reason });
+    if (res.data.success) {
+      showMessage('Order rejected', 'success');
+      // Update local orders state
+      setOrders(prev => prev.map(o => 
+        o._id === orderId ? { ...o, status: 'rejected' } : o
+      ));
+      return { success: true };
+    }
+    throw new Error(res.data.message || 'Rejection failed');
+  } catch (error) {
+    showMessage(getErrorMessage(error), 'error');
+    return { success: false };
+  } finally {
+    setLoading(false);
+  }
+};
+
+const handleUpdateOrderStatus = async (orderId, status) => {
+  setLoading(true);
+  try {
+    const res = await axiosSecure.patch(`/api/orders/${orderId}/status`, { status });
+    if (res.data.success) {
+      showMessage(`Order status updated to ${status}`, 'success');
+      // Update local orders state
+      setOrders(prev => prev.map(o => 
+        o._id === orderId ? { ...o, status } : o
+      ));
+      return { success: true };
+    }
+    throw new Error(res.data.message || 'Status update failed');
+  } catch (error) {
+    showMessage(getErrorMessage(error), 'error');
+    return { success: false };
+  } finally {
+    setLoading(false);
+  }
+};
+
+const handleGetOrderHistory = async (orderId) => {
+  setLoading(true);
+  try {
+    const res = await axiosSecure.get(`/api/orders/${orderId}/history`);
+    if (res.data.success) {
+      return { 
+        success: true, 
+        history: res.data.history 
+      };
+    }
+    throw new Error('Failed to fetch history');
+  } catch (error) {
+    showMessage(getErrorMessage(error), 'error');
+    return { success: false };
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+
+
 useEffect(()=>{
   handleGetAllProducts();
   handleGetAllOfficers();
@@ -767,12 +979,18 @@ useEffect(()=>{
     currentStore,
     handleUpdateProductStock,
     handleUpdateProduct,
+        // Order Handlers
+    handleGetOrCreateDraftOrder,
+    handleAddToDraftOrder,
+    handleUpdateDraftPaymentMethod,
+    handleSubmitDraftOrder,
+    handleGetAllOrders,
     orders,
-  draftOrder,
-  handleCreateOrUpdateDraftOrder,
-  handleSubmitDraftOrder,
-  handleGetStoreDrafts,
-  handleGetAllOrders,
+    handleGetOrderById,
+    handleApproveOrder,
+    handleRejectOrder,
+    handleUpdateOrderStatus,
+    handleGetOrderHistory
   };
 
   return (

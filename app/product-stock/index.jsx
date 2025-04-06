@@ -23,6 +23,7 @@ const ProductStockScreen = () => {
   const [orderQuantity, setOrderQuantity] = useState(1);
   const [discountPercentage, setDiscountPercentage] = useState(0);
   const [bonusQuantity, setBonusQuantity] = useState(0);
+  const [paymentMethod, setPaymentMethod] = useState('cash');
   const [editedProduct, setEditedProduct] = useState(null);
   const [updatingStock, setUpdatingStock] = useState(false);
   const [updatingProduct, setUpdatingProduct] = useState(false);
@@ -67,6 +68,7 @@ const ProductStockScreen = () => {
       setOrderQuantity(1);
       setDiscountPercentage(0);
       setBonusQuantity(0);
+      setPaymentMethod('cash');
       
       if (draftOrder) {
         const existingProduct = draftOrder.products.find(
@@ -77,6 +79,9 @@ const ProductStockScreen = () => {
           setOrderQuantity(existingProduct.quantity);
           setDiscountPercentage(existingProduct.discountPercentage);
           setBonusQuantity(existingProduct.bonusQuantity);
+        }
+        if (draftOrder.paymentMethod) {
+          setPaymentMethod(draftOrder.paymentMethod);
         }
       }
       
@@ -180,6 +185,7 @@ const ProductStockScreen = () => {
         quantity: orderQuantity,
         bonusQuantity,
         discountPercentage,
+        paymentMethod,
         notes: `Order for ${name}`
       };
 
@@ -213,6 +219,7 @@ const ProductStockScreen = () => {
       );
       
       if (response.data.success) {
+        handleGetAllProducts(searchQuery, sortOption);
         showMessage('Order submitted successfully!', 'success');
         setDraftOrder(null);
         setDraftModalVisible(false);
@@ -440,6 +447,36 @@ const ProductStockScreen = () => {
               </View>
 
               <View style={styles.modalSection}>
+                <Text variant="bodyMedium" style={styles.label}>Payment Method</Text>
+                <View style={styles.paymentMethodContainer}>
+                  <TouchableOpacity
+                    style={[
+                      styles.paymentMethodButton,
+                      paymentMethod === 'cash' && styles.paymentMethodSelected,
+                      { borderColor: theme.colors.primary }
+                    ]}
+                    onPress={() => setPaymentMethod('cash')}
+                  >
+                    <Text style={paymentMethod === 'cash' ? { color: 'white' } : { color: theme.colors.primary }}>
+                      Cash
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.paymentMethodButton,
+                      paymentMethod === 'credit' && styles.paymentMethodSelected,
+                      { borderColor: theme.colors.primary }
+                    ]}
+                    onPress={() => setPaymentMethod('credit')}
+                  >
+                    <Text style={paymentMethod === 'credit' ? { color: 'white' } : { color: theme.colors.primary }}>
+                      Credit
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.modalSection}>
                 <Text variant="bodyMedium" style={styles.label}>Total Price</Text>
                 <Text variant="bodyLarge" style={[styles.totalPrice, { color: theme.colors.primary }]}>
                   BDT {selectedProduct ? calculateTotal() : "0.00"}
@@ -654,10 +691,23 @@ const ProductStockScreen = () => {
                 Draft Order Summary
               </Text>
               
+              <View style={styles.paymentMethodDisplay}>
+                <Text variant="bodyMedium">
+                  Payment Method: <Text style={{ fontWeight: 'bold' }}>{draftOrder?.paymentMethod || 'cash'}</Text>
+                </Text>
+              </View>
+              
               <ScrollView style={styles.draftItemsContainer}>
                 {draftOrder?.products?.map((item, index) => (
                   <View key={index} style={styles.draftItem}>
-                    <Text variant="bodyMedium" style={{ flex: 2 }}>{item.name}</Text>
+                    <View style={{ flex: 2 }}>
+                      <Text variant="bodyMedium">{item.name}</Text>
+                      {item.bonusQuantity > 0 && (
+                        <Text variant="bodySmall" style={{ color: theme.colors.primary }}>
+                          +{item.bonusQuantity} bonus
+                        </Text>
+                      )}
+                    </View>
                     <Text variant="bodyMedium" style={{ textAlign: 'right' }}>
                       {item.quantity} × BDT {item.price.toFixed(2)}
                       {item.discountPercentage > 0 && (
@@ -880,6 +930,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  paymentMethodContainer: {
+    flexDirection: 'row',
+    marginTop: 8,
+    gap: 8,
+  },
+  paymentMethodButton: {
+    flex: 1,
+    padding: 12,
+    borderWidth: 1,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  paymentMethodSelected: {
+    backgroundColor: '#6200ee',
+  },
+  paymentMethodDisplay: {
+    marginBottom: 16,
+    paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },

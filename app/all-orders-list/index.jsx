@@ -1,11 +1,10 @@
-import React, { useState, useRef,useContext } from "react";
+import React, { useState, useRef, useContext, useEffect } from "react";
 import { View, FlatList, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { TextInput, Card, Text, Button, Menu, PaperProvider, Divider, useTheme } from "react-native-paper";
 import { Link } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
-import {ServicesProvider} from '../../provider/Provider.jsx';
-
+import { ServicesProvider } from '../../provider/Provider.jsx';
 
 const OrdersListScreen = () => {
   const theme = useTheme();
@@ -14,50 +13,30 @@ const OrdersListScreen = () => {
   const [sortOption, setSortOption] = useState("amount");
   const menuAnchorRef = useRef(null);
   
-  const {handleGetAllOrders,order} = useContext(ServicesProvider);
+  const { handleGetAllOrders, orders } = useContext(ServicesProvider);
+ 
+  useEffect(() => {
+    handleGetAllOrders();
+  }, []);
   
-  const orders = [
-    { 
-      id: "1", 
-      officerName: "John Doe", 
-      amount: 15000, 
-      date: "2023-06-15", 
-      time: "10:30 AM",
-      status: "Completed"
-    },
-    { 
-      id: "2", 
-      officerName: "Jane Smith", 
-      amount: 8500, 
-      date: "2023-06-16", 
-      time: "02:15 PM",
-      status: "Pending"
-    },
-    { 
-      id: "3", 
-      officerName: "Mike Johnson", 
-      amount: 22000, 
-      date: "2023-06-14", 
-      time: "09:45 AM",
-      status: "Completed"
-    },
-    { 
-      id: "4", 
-      officerName: "Sarah Williams", 
-      amount: 12000, 
-      date: "2023-06-17", 
-      time: "11:20 AM",
-      status: "Shipped"
-    },
-  ];
-
   const filteredOrders = orders.filter((order) =>
-    order.officerName.toLowerCase().includes(searchQuery.toLowerCase())
+    order?.createdBy?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    order?.store?.storeName?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const sortedOrders = [...filteredOrders].sort((a, b) =>
-    sortOption === "amount" ? b.amount - a.amount : new Date(b.date) - new Date(a.date)
+    sortOption === "amount" ? b.orderFinalTotal - a.orderFinalTotal : new Date(b.submittedAt) - new Date(a.submittedAt)
   );
+
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString();
+  };
+
+  const formatTime = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
 
   return (
     <PaperProvider>
@@ -118,27 +97,32 @@ const OrdersListScreen = () => {
         {/* Orders List */}
         <FlatList
           data={sortedOrders}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item._id}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => (
             <Card mode="contained" style={styles.card}>
               <Card.Content style={styles.cardContent}>
                 <View style={styles.cardHeader}>
-                  <Text variant="titleMedium" style={styles.officerName}>
-                    {item.officerName}
-                  </Text>
+                  <View>
+                    <Text variant="titleMedium" style={styles.officerName}>
+                      {item.createdBy?.name || 'Unknown Officer'}
+                    </Text>
+                    <Text variant="bodySmall" style={styles.storeName}>
+                      {item.store?.storeName || 'Unknown Store'}
+                    </Text>
+                  </View>
                   <Text 
                     variant="labelSmall" 
                     style={[
                       styles.statusBadge,
                       { 
                         backgroundColor: 
-                          item.status === "Completed" ? "#e6f7ee" : 
-                          item.status === "Pending" ? "#ffebee" : 
+                          item.status === "completed" ? "#e6f7ee" : 
+                          item.status === "pending" ? "#ffebee" : 
                           "#e3f2fd",
                         color: 
-                          item.status === "Completed" ? "#28a745" : 
-                          item.status === "Pending" ? "#dc3545" : 
+                          item.status === "completed" ? "#28a745" : 
+                          item.status === "pending" ? "#dc3545" : 
                           "#17a2b8"
                       }
                     ]}
@@ -151,21 +135,35 @@ const OrdersListScreen = () => {
                   <View style={styles.detailRow}>
                     <MaterialIcons name="calendar-today" size={16} color="#757575" />
                     <Text variant="bodyMedium" style={styles.detailText}>
-                      {item.date} • {item.time}
+                      {formatDate(item.submittedAt)} • {formatTime(item.submittedAt)}
                     </Text>
                   </View>
                   
                   <View style={styles.detailRow}>
                     <MaterialIcons name="attach-money" size={16} color="#757575" />
                     <Text variant="bodyMedium" style={styles.detailText}>
-                      ৳{item.amount.toLocaleString()}
+                      ৳{item.orderFinalTotal?.toLocaleString()}
+                    </Text>
+                  </View>
+
+                  <View style={styles.detailRow}>
+                    <MaterialIcons name="discount" size={16} color="#757575" />
+                    <Text variant="bodyMedium" style={styles.detailText}>
+                      Discount: ৳{item.totalDiscount?.toLocaleString()}
+                    </Text>
+                  </View>
+
+                  <View style={styles.detailRow}>
+                    <MaterialIcons name="payment" size={16} color="#757575" />
+                    <Text variant="bodyMedium" style={styles.detailText}>
+                      Payment: {item.paymentMethod}
                     </Text>
                   </View>
                 </View>
               </Card.Content>
               
               <Card.Actions style={styles.cardActions}>
-                <Link href={`/order-details/${item.id}`} asChild>
+                <Link href={`/all-orders-list/${item._id}`} asChild>
                   <Button 
                     mode="text" 
                     textColor={theme.colors.primary}
@@ -232,12 +230,16 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 8,
   },
   officerName: {
     fontWeight: 'bold',
     color: '#333',
+  },
+  storeName: {
+    color: '#666',
+    fontSize: 12,
   },
   statusBadge: {
     paddingHorizontal: 8,

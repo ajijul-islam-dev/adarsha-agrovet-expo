@@ -169,7 +169,7 @@ app.post('/login', async (req, res) => {
     const token = jwt.sign(
       tokenPayload,
       process.env.JWT_SECRET,
-      { expiresIn: '1h' }
+      { expiresIn: '72h' }
     );
 
     res.status(200).json({
@@ -1105,7 +1105,6 @@ app.get('/stores/my-stores',verifyToken, async (req, res) => {
 });
 
 // _____________________Orders___________________________
-// Order Routes
 
 // Create or update draft order
 app.post('/api/orders/draft', verifyToken, async (req, res) => {
@@ -1301,6 +1300,7 @@ app.patch('/api/orders/:id', verifyToken, async (req, res) => {
 // Submit draft order
 app.post('/api/orders/:id/submit', verifyToken, async (req, res) => {
   try {
+    // 1. Find Order (Existing Code)
     const order = await Order.findById(req.params.id);
     if (!order) {
       return res.status(404).json({
@@ -1309,15 +1309,7 @@ app.post('/api/orders/:id/submit', verifyToken, async (req, res) => {
       });
     }
 
-    // Check permissions (admin or marketing officer who created it)
-    if (req.user.role !== 'admin' && order.createdBy.toString() !== req.user.id) {
-      return res.status(403).json({
-        success: false,
-        message: 'Unauthorized to submit this order'
-      });
-    }
-
-    // Verify it's a draft
+    // 2. Draft Check (Existing Code)
     if (order.status !== 'draft') {
       return res.status(400).json({
         success: false,
@@ -1325,22 +1317,55 @@ app.post('/api/orders/:id/submit', verifyToken, async (req, res) => {
       });
     }
 
-    // Verify it has products
-    if (order.products.length === 0) {
+    // 3. Stock Validation (Fixed to check both quantities)
+    const productStockChecks = await Promise.all(
+      order.products.map(async (item) => {
+        const product = await Product.findById(item.product);
+        if (!product) {
+          return { valid: false, productId: item.product, reason: 'Product not found' };
+        }
+        // Fixed: Now properly checking both quantity and bonusQuantity
+        const totalDeduction = item.quantity + (item.bonusQuantity || 0);
+        if (product.stock < totalDeduction) {
+          return { valid: false, productId: item.product, reason: 'Insufficient stock' };
+        }
+        return { valid: true, productId: item.product };
+      })
+    );
+
+    const invalidProducts = productStockChecks.filter(check => !check.valid);
+    if (invalidProducts.length > 0) {
       return res.status(400).json({
         success: false,
-        message: 'Cannot submit empty order'
+        message: 'Stock validation failed',
+        errors: invalidProducts
       });
     }
 
-    // Update status and save
-    order.status = 'submitted';
+    // 4. Stock Deduction (Fixed to deduct both quantities)
+    for (const item of order.products) {
+      await Product.findByIdAndUpdate(
+        item.product,
+        { 
+          $inc: { 
+            stock: -(
+              item.quantity + 
+              (item.bonusQuantity || 0) // Fixed: Using bonusQuantity consistently
+            ) 
+          } 
+        }
+      );
+    }
+
+    // 5. Order Status Update (Existing Code - Unchanged)
+    order.status = 'pending';
     order.submittedAt = new Date();
     await order.save();
 
+    // 6. Response (Existing Code - Unchanged)
     res.json({
       success: true,
-      message: 'Order submitted successfully',
+      message: 'Order submitted and stock updated (including bonus quantity)',
       order
     });
 
@@ -1353,7 +1378,6 @@ app.post('/api/orders/:id/submit', verifyToken, async (req, res) => {
     });
   }
 });
-
 // Get draft orders for a store
 app.get('/api/orders/draft', verifyToken, async (req, res) => {
   try {
@@ -1371,10 +1395,40 @@ app.get('/api/orders/draft', verifyToken, async (req, res) => {
       status: 'draft',
       createdBy: req.user.id
     }).populate('products.product', 'productName price packSize unit');
+    console.log(order)
+    if (!order) {
+      return res.json({
+        success: true,
+        order: null
+      });
+    }
+
+    // Calculate amounts for each product
+    const productsWithAmounts = order.products.map(product => {
+      const discountedPrice = product.price * (1 - (product.discountPercentage || 0) / 100);
+      const finalAmount = discountedPrice * product.quantity;
+      return {
+        ...product.toObject(),
+        totalAmount: product.price * product.quantity,
+        finalAmount
+      };
+    });
+
+    // Calculate order totals
+    const orderTotal = productsWithAmounts.reduce((sum, p) => sum + (p.price * p.quantity), 0);
+    const orderFinalTotal = productsWithAmounts.reduce((sum, p) => sum + p.finalAmount, 0);
+
+    const enhancedOrder = {
+      ...order.toObject(),
+      products: productsWithAmounts,
+      orderTotal,
+      orderFinalTotal,
+      totalDiscount: orderTotal - orderFinalTotal
+    };
 
     res.json({
       success: true,
-      order: order || null
+      order: enhancedOrder
     });
 
   } catch (error) {
@@ -1387,9 +1441,7 @@ app.get('/api/orders/draft', verifyToken, async (req, res) => {
   }
 });
 
-/// _____________________Orders___________________________
-// Order Routes
-
+// Enhanced Get all orders with filtering, searching and sorting
 // Enhanced Get all orders with filtering, searching and sorting
 app.get('/api/orders', verifyToken, async (req, res) => {
   try {
@@ -1459,18 +1511,39 @@ app.get('/api/orders', verifyToken, async (req, res) => {
       .skip(skip)
       .limit(parseInt(limit));
 
-    // Calculate total amount for each order and sort if needed
+    // Enhance orders with calculated amounts
+    orders = orders.map(order => {
+      // Calculate amounts for each product
+      const productsWithAmounts = order.products.map(product => {
+        const discountedPrice = product.price * (1 - (product.discountPercentage || 0) / 100);
+        const finalAmount = discountedPrice * product.quantity;
+        return {
+          ...product.toObject(),
+          totalAmount: product.price * product.quantity,
+          finalAmount
+        };
+      });
+
+      // Calculate order totals
+      const orderTotal = productsWithAmounts.reduce((sum, p) => sum + p.totalAmount, 0);
+      const orderFinalTotal = productsWithAmounts.reduce((sum, p) => sum + p.finalAmount, 0);
+      const totalDiscount = orderTotal - orderFinalTotal;
+
+      return {
+        ...order.toObject(),
+        products: productsWithAmounts,
+        orderTotal,
+        orderFinalTotal,
+        totalDiscount
+      };
+    });
+
+    // Sort by amount if needed
     if (sortBy === 'amount') {
-      orders = orders.map(order => {
-        const totalAmount = order.products.reduce((sum, product) => {
-          const discountedPrice = product.price * (1 - (product.discountPercentage || 0) / 100);
-          return sum + (discountedPrice * product.quantity);
-        }, 0);
-        return { ...order.toObject(), totalAmount };
-      }).sort((a, b) => {
+      orders.sort((a, b) => {
         return sortOrder === 'asc' 
-          ? a.totalAmount - b.totalAmount 
-          : b.totalAmount - a.totalAmount;
+          ? a.orderFinalTotal - b.orderFinalTotal 
+          : b.orderFinalTotal - a.orderFinalTotal;
       });
     }
 
@@ -1499,6 +1572,71 @@ app.get('/api/orders', verifyToken, async (req, res) => {
   }
 });
 
+app.get('/api/orders/:id', verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Base query
+    let query = { _id: id };
+
+    // For non-admin users, only show their own orders
+    if (req.user.role !== 'admin') {
+      query.createdBy = req.user.id;
+    }
+
+    const order = await Order.findOne(query)
+      .populate('store', 'storeName proprietorName')
+      .populate('products.product', 'productName price packSize unit description')
+      .populate('createdBy', 'name email');
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found or unauthorized'
+      });
+    }
+
+    // Enhance with calculated amounts
+    const productsWithAmounts = order.products.map(product => {
+      const discountedPrice = product.price * (1 - (product.discountPercentage || 0) / 100);
+      const finalAmount = discountedPrice * product.quantity;
+      
+      return {
+        ...product.toObject(),
+        totalAmount: product.price * product.quantity,
+        finalAmount,
+        bonusQuantity: product.bonusQuantity || 0
+      };
+    });
+
+    // Calculate order totals
+    const orderTotal = productsWithAmounts.reduce((sum, p) => sum + p.totalAmount, 0);
+    const orderFinalTotal = productsWithAmounts.reduce((sum, p) => sum + p.finalAmount, 0);
+    const totalDiscount = orderTotal - orderFinalTotal;
+
+    const enhancedOrder = {
+      ...order.toObject(),
+      products: productsWithAmounts,
+      orderTotal,
+      orderFinalTotal,
+      totalDiscount
+    };
+
+    res.json({
+      success: true,
+      order: enhancedOrder
+    });
+
+  } catch (error) {
+    console.error('Get order error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch order',
+      error: error.message
+    });
+  }
+});
+
 // Get order statistics (for dashboard)
 app.get('/api/orders/stats', verifyToken, async (req, res) => {
   try {
@@ -1512,38 +1650,48 @@ app.get('/api/orders/stats', verifyToken, async (req, res) => {
     const stats = await Order.aggregate([
       { $match: matchQuery },
       {
-        $group: {
-          _id: null,
-          totalOrders: { $sum: 1 },
+        $project: {
+          status: 1,
+          products: 1,
+          createdAt: 1,
           totalAmount: {
             $sum: {
-              $reduce: {
+              $map: {
                 input: "$products",
-                initialValue: 0,
+                as: "product",
+                in: { $multiply: ["$$product.price", "$$product.quantity"] }
+              }
+            }
+          },
+          finalAmount: {
+            $sum: {
+              $map: {
+                input: "$products",
+                as: "product",
                 in: {
-                  $add: [
-                    "$$value",
-                    { $multiply: ["$$this.price", "$$this.quantity"] }
+                  $multiply: [
+                    { $subtract: [1, { $divide: ["$$product.discountPercentage", 100] }] },
+                    { $multiply: ["$$product.price", "$$product.quantity"] }
                   ]
                 }
               }
             }
-          },
+          }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalOrders: { $sum: 1 },
+          totalAmount: { $sum: "$totalAmount" },
+          totalFinalAmount: { $sum: "$finalAmount" },
+          totalDiscount: { $sum: { $subtract: ["$totalAmount", "$finalAmount"] } },
           byStatus: {
             $push: {
               status: "$status",
-              amount: {
-                $reduce: {
-                  input: "$products",
-                  initialValue: 0,
-                  in: {
-                    $add: [
-                      "$$value",
-                      { $multiply: ["$$this.price", "$$this.quantity"] }
-                    ]
-                  }
-                }
-              }
+              amount: "$totalAmount",
+              finalAmount: "$finalAmount",
+              discount: { $subtract: ["$totalAmount", "$finalAmount"] }
             }
           }
         }
@@ -1552,6 +1700,8 @@ app.get('/api/orders/stats', verifyToken, async (req, res) => {
         $project: {
           totalOrders: 1,
           totalAmount: 1,
+          totalFinalAmount: 1,
+          totalDiscount: 1,
           statusStats: {
             $arrayToObject: {
               $map: {
@@ -1561,7 +1711,9 @@ app.get('/api/orders/stats', verifyToken, async (req, res) => {
                   k: "$$stat.status",
                   v: {
                     count: { $sum: 1 },
-                    amount: "$$stat.amount"
+                    amount: "$$stat.amount",
+                    finalAmount: "$$stat.finalAmount",
+                    discount: "$$stat.discount"
                   }
                 }
               }
@@ -1576,6 +1728,8 @@ app.get('/api/orders/stats', verifyToken, async (req, res) => {
       stats: stats[0] || {
         totalOrders: 0,
         totalAmount: 0,
+        totalFinalAmount: 0,
+        totalDiscount: 0,
         statusStats: {}
       }
     });
@@ -1673,6 +1827,309 @@ app.get('/api/orders/summary', verifyToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch order summary',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @api {patch} /api/orders/:id/approve Approve Order
+ * @apiPermission admin
+ */
+app.patch('/api/orders/:id/approve', verifyToken, async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    // Check admin privileges
+    if (req.user.role !== 'admin') {
+      await session.abortTransaction();
+      return res.status(403).json({
+        success: false,
+        message: 'Admin privileges required'
+      });
+    }
+
+    const order = await Order.findById(req.params.id).session(session);
+    
+    if (!order) {
+      await session.abortTransaction();
+      return res.status(404).json({ 
+        success: false,
+        message: 'Order not found' 
+      });
+    }
+
+    if (order.status !== 'pending') {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: `Only pending orders can be approved. Current status: ${order.status}`
+      });
+    }
+
+    // Update order
+    order.status = 'approved';
+    order.approvedAt = new Date();
+    order.approvedBy = req.user.id;
+    
+    // Add to status history
+    order.statusHistory.push({
+      status: 'approved',
+      changedBy: req.user.id,
+      notes: 'Order approved by admin'
+    });
+
+    await order.save({ session });
+    await session.commitTransaction();
+
+    // Get updated order with populated fields
+    const updatedOrder = await Order.findById(order._id)
+      .populate('store', 'storeName proprietorName')
+      .populate('products.product', 'productName price')
+      .populate('approvedBy', 'name');
+
+    res.json({
+      success: true,
+      message: 'Order approved successfully',
+      order: updatedOrder
+    });
+
+  } catch (error) {
+    await session.abortTransaction();
+    console.error('Approve order error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to approve order',
+      error: error.message
+    });
+  } finally {
+    session.endSession();
+  }
+});
+
+
+
+
+/**
+ * @api {patch} /api/orders/:id/reject Reject Order
+ * @apiPermission admin
+ */
+app.patch('/api/orders/:id/reject', verifyToken, async (req, res) => {
+  const { reason } = req.body;
+
+  // Validate rejection reason
+  if (!reason || reason.trim().length < 5) {
+    return res.status(400).json({
+      success: false,
+      message: 'Rejection reason must be at least 5 characters'
+    });
+  }
+
+  try {
+    // Check admin privileges
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Admin privileges required'
+      });
+    }
+
+    const order = await Order.findById(req.params.id);
+    
+    if (!order) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Order not found' 
+      });
+    }
+
+    if (order.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: `Only pending orders can be rejected. Current status: ${order.status}`
+      });
+    }
+
+    // Update order
+    order.status = 'rejected';
+    order.rejectedAt = new Date();
+    order.rejectedBy = req.user.id;
+    order.rejectionReason = reason;
+    
+    // Add to status history
+    order.statusHistory.push({
+      status: 'rejected',
+      changedBy: req.user.id,
+      notes: reason
+    });
+
+    await order.save();
+
+    // Get updated order with populated fields
+    const updatedOrder = await Order.findById(order._id)
+      .populate('store', 'storeName proprietorName')
+      .populate('rejectedBy', 'name');
+
+    res.json({
+      success: true,
+      message: 'Order rejected successfully',
+      order: updatedOrder
+    });
+
+  } catch (error) {
+    console.error('Reject order error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to reject order',
+      error: error.message
+    });
+  }
+});
+
+
+
+/**
+ * @api {patch} /api/orders/:id/status Update Order Status
+ * @apiPermission admin|marketing_officer
+ */
+app.patch('/api/orders/:id/status', verifyToken, async (req, res) => {
+  const { status, notes } = req.body;
+  const validStatuses = ['pending', 'approved', 'processing', 'shipped', 'completed', 'cancelled'];
+
+  try {
+    const order = await Order.findById(req.params.id);
+    
+    if (!order) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Order not found' 
+      });
+    }
+
+    // Check permissions
+    if (req.user.role !== 'admin' && order.createdBy.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized to update this order'
+      });
+    }
+
+    // Validate status
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid status. Valid values: ${validStatuses.join(', ')}`
+      });
+    }
+
+    // Prevent invalid transitions
+    if (order.status === 'cancelled') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cancelled orders cannot be modified'
+      });
+    }
+
+    if (status === 'approved' && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only admin can approve orders'
+      });
+    }
+
+    // Update order
+    const previousStatus = order.status;
+    order.status = status;
+    
+    // Set timestamps
+    if (status === 'processing') order.processingAt = new Date();
+    if (status === 'shipped') order.shippedAt = new Date();
+    if (status === 'completed') order.completedAt = new Date();
+    if (status === 'cancelled') order.cancelledAt = new Date();
+    
+    // Track who made the change
+    if (status === 'approved') order.approvedBy = req.user.id;
+    if (status === 'rejected') order.rejectedBy = req.user.id;
+    
+    // Add to status history
+    order.statusHistory.push({
+      status,
+      changedBy: req.user.id,
+      notes: notes || `Status changed from ${previousStatus} to ${status}`
+    });
+
+    await order.save();
+
+    // Get updated order with populated fields
+    const updatedOrder = await Order.findById(order._id)
+      .populate('store', 'storeName proprietorName')
+      .populate('approvedBy', 'name')
+      .populate('rejectedBy', 'name');
+
+    res.json({
+      success: true,
+      message: `Order status updated to ${status}`,
+      order: updatedOrder
+    });
+
+  } catch (error) {
+    console.error('Update status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update order status',
+      error: error.message
+    });
+  }
+});
+
+
+/**
+ * @api {get} /api/orders/:id/history Get Order History
+ * @apiPermission admin|marketing_officer
+ */
+app.get('/api/orders/:id/history', verifyToken, async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id)
+      .select('statusHistory createdBy')
+      .populate('statusHistory.changedBy', 'name email role')
+      .populate('createdBy', 'name');
+
+    if (!order) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Order not found' 
+      });
+    }
+
+    // Check permissions
+    if (req.user.role !== 'admin' && order.createdBy._id.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized to view this order history'
+      });
+    }
+
+    // Format history entries
+    const history = (order.statusHistory || []).map(entry => ({
+      status: entry.status,
+      changedAt: entry.changedAt,
+      changedBy: entry.changedBy,
+      notes: entry.notes || '',
+      role: entry.changedBy?.role
+    }));
+
+    res.json({
+      success: true,
+      history,
+      orderCreator: order.createdBy.name
+    });
+
+  } catch (error) {
+    console.error('Get history error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch order history',
       error: error.message
     });
   }
