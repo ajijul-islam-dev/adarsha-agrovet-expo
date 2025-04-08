@@ -168,7 +168,7 @@ const MyStoresScreen = () => {
                               : theme.colors.onSurfaceVariant
                           }
                         ]}>
-                          ৳{(item.totalDue || 0).toLocaleString()}
+                          ৳{(item.totalFinalDues || 0).toLocaleString()}
                         </Text>
                       </View>
                     )}

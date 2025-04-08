@@ -1,5 +1,5 @@
-import React, { useState, useContext, useEffect } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import React, { useState, useContext, useEffect,useRef } from 'react';
+import { ScrollView, StyleSheet, View, Animated, Dimensions } from 'react-native';
 import {
   Appbar,
   Card,
@@ -18,10 +18,10 @@ import {
   Paragraph
 } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, router } from 'expo-router';
 import { ServicesProvider } from '../../provider/Provider.jsx';
 
-const OrderDetailsScreen = ({ navigation }) => {
+const OrderDetailsScreen = () => {
   const theme = useTheme();
   const { id } = useLocalSearchParams();
   const [menuVisible, setMenuVisible] = useState(false);
@@ -29,6 +29,8 @@ const OrderDetailsScreen = ({ navigation }) => {
   const [order, setOrder] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState({ visible: false, type: null });
+  const [initialLoad, setInitialLoad] = useState(true);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const {
     handleGetOrderById,
@@ -44,15 +46,26 @@ const OrderDetailsScreen = ({ navigation }) => {
         const result = await handleGetOrderById(id);
         if (result.success) {
           setOrder(result.order);
+          // Fade in animation when data loads
+          Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true,
+          }).start();
         }
       } catch (error) {
         console.error('Failed to fetch order:', error);
       } finally {
         setLoading(false);
+        setInitialLoad(false);
       }
     };
 
     fetchOrder();
+
+    return () => {
+      fadeAnim.setValue(0);
+    };
   }, [id]);
 
   const formatDate = (dateString) => {
@@ -93,29 +106,51 @@ const OrderDetailsScreen = ({ navigation }) => {
     }
   };
 
-  if (loading && !order) {
+  if (initialLoad || (loading && !order)) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" animating color={theme.colors.primary} />
+  <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <Appbar.Header>
+          <Appbar.BackAction onPress={() => router.back()} />
+          <Appbar.Content title="Loading Store..." />
+        </Appbar.Header>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={{ marginTop: 16, color: theme.colors.onSurface }}>Loading store details...</Text>
+        </View>
       </View>
     );
   }
 
-  if (!order) {
+  if (!order && !loading) {
     return (
-      <View style={styles.errorContainer}>
-        <Text variant="titleMedium">Order not found</Text>
-        <Button mode="contained" onPress={() => navigation.goBack()} style={styles.backButton}>
-          Back to Orders
-        </Button>
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <Appbar.Header>
+          <Appbar.BackAction onPress={() => router.back()} />
+          <Appbar.Content title="Order Not Found" />
+        </Appbar.Header>
+        <View style={styles.loadingContainer}>
+          <MaterialIcons 
+            name="error-outline" 
+            size={40} 
+            color={theme.colors.error} 
+          />
+          <Text style={{ marginTop: 16, color: theme.colors.onSurface }}>Order not found</Text>
+          <Button 
+            mode="contained" 
+            onPress={() => router.back()}
+            style={{ marginTop: 16 }}
+          >
+            Go Back
+          </Button>
+        </View>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
       <Appbar.Header>
-        <Appbar.BackAction onPress={() => navigation.goBack()} />
+        <Appbar.BackAction onPress={() => router.back()} />
         <Appbar.Content title="Order Details" />
         {order.status === 'pending' && (
           <Menu
@@ -164,7 +199,7 @@ const OrderDetailsScreen = ({ navigation }) => {
         <Card style={styles.card}>
           <Card.Content>
             <View style={styles.row}>
-              <Text variant="titleMedium">Order #{order._id.slice(-6).toUpperCase()}</Text>
+              <Text variant="titleMedium">Ordered by {order.createdBy.name}</Text>
               <Text style={{ color: theme.colors.onSurfaceVariant }}>
                 {formatDate(order.submittedAt)} • {formatTime(order.submittedAt)}
               </Text>
@@ -176,11 +211,11 @@ const OrderDetailsScreen = ({ navigation }) => {
             </View>
             <View style={styles.row}>
               <Text>Discount:</Text>
-              <Text style={{ color: theme.colors.error }}>-৳{order.totalDiscount?.toLocaleString()}</Text>
+              <Text style={{ color: theme.colors.error }}>-৳{order.totalDiscount?.toLocaleString()} ({order.orderFinalTotal.discountPercentage.toLocaleString()}℅)</Text>
             </View>
             <View style={[styles.row, { marginTop: 8 }]}>
               <Text variant="titleSmall">Total:</Text>
-              <Text variant="titleSmall">৳{order.orderFinalTotal?.toLocaleString()}</Text>
+              <Text variant="titleSmall">৳{order.orderFinalTotal?.finalAmount?.toLocaleString()}</Text>
             </View>
             <View style={[styles.row, { marginTop: 8 }]}>
               <MaterialIcons name="payment" size={20} color={theme.colors.primary} />
@@ -205,6 +240,9 @@ const OrderDetailsScreen = ({ navigation }) => {
                       {product.quantity} {product.unit} × ৳{product.price?.toLocaleString()}
                       {product.bonusQuantity > 0 && (
                         <Text style={{ color: theme.colors.primary }}> (+{product.bonusQuantity} bonus)</Text>
+                      )}
+                      {product.discountPercentage > 0 && (
+                        <Text style={{ color: theme.colors.primary }}> (-{product.discountPercentage}% disc)</Text>
                       )}
                     </Text>
                   </View>
@@ -272,7 +310,7 @@ const OrderDetailsScreen = ({ navigation }) => {
             icon="cog"
             label="Manage Order"
             onPress={() => setModalVisible(true)}
-            style={styles.fab}
+            style={{...styles.fab,backgroundColor : theme.colors.primary}}
             color="white"
           />
         )}
@@ -319,7 +357,7 @@ const OrderDetailsScreen = ({ navigation }) => {
           </Dialog.Actions>
         </Dialog>
       </Portal>
-    </View>
+    </Animated.View>
   );
 };
 
@@ -335,28 +373,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
     padding: 20,
-  },
-  backButton: {
-    marginTop: 20,
-  },
-  statusContainer: {
-    marginBottom: 16,
-    alignItems: 'center',
-  },
-  progressBar: {
-    height: 4,
-    width: '100%',
-    marginBottom: 8,
-    borderRadius: 2,
-  },
-  statusChip: {
-    alignSelf: 'center',
   },
   card: {
     marginBottom: 16,
@@ -406,6 +423,19 @@ const styles = StyleSheet.create({
     padding: 20,
     marginHorizontal: 16,
     borderRadius: 12,
+  },
+  statusContainer: {
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  progressBar: {
+    height: 4,
+    width: '100%',
+    marginBottom: 8,
+    borderRadius: 2,
+  },
+  statusChip: {
+    alignSelf: 'center',
   },
 });
 

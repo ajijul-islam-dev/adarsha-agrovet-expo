@@ -803,7 +803,7 @@ const handleGetMyStores = async (searchQuery = "", areaFilter = "") => {
         
         const ordersWithTotals = res.data.orders.map(calculateOrderAmounts);
         setOrders(ordersWithTotals);
-        console.log(res.data.orders)
+      
         return { 
           success: true, 
           orders: ordersWithTotals,

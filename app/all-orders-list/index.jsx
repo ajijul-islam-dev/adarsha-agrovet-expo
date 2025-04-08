@@ -6,6 +6,8 @@ import { Link } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 import { ServicesProvider } from '../../provider/Provider.jsx';
 
+import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
+
 const OrdersListScreen = () => {
   const theme = useTheme();
   const [searchQuery, setSearchQuery] = useState("");
@@ -140,9 +142,9 @@ const OrdersListScreen = () => {
                   </View>
                   
                   <View style={styles.detailRow}>
-                    <MaterialIcons name="attach-money" size={16} color="#757575" />
+                       <FontAwesome6 name="bangladeshi-taka-sign" size={16} color="#757575" />
                     <Text variant="bodyMedium" style={styles.detailText}>
-                      ৳{item.orderFinalTotal?.toLocaleString()}
+                      {item.orderFinalTotal?.toLocaleString()}
                     </Text>
                   </View>
 

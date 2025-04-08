@@ -141,7 +141,7 @@ const AllStoresScreen = () => {
                     right={() => (
                       <View style={[styles.dueBadge, { backgroundColor: theme.colors.errorContainer }]}>
                         <Text style={[styles.dueBadgeText, { color: theme.colors.onErrorContainer }]}>
-                          ৳{(item.totalDue || 0).toLocaleString()}
+                          ৳{(item.totalFinalDues || 0).toLocaleString()}
                         </Text>
                       </View>
                     )}

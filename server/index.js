@@ -8,7 +8,8 @@ import User from './models/User.js';
 import Product from './models/Product.js'
 import Store from './models/Store.js'
 import Order from './models/Order.js';
-
+import Payment from './models/Payment.js';
+import Due from './models/Due.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -32,7 +33,7 @@ const verifyToken = async (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded;
-    console.log(decoded.id)
+    
     next();
   } catch (error) {
     return res.status(403).json({
@@ -770,60 +771,255 @@ app.post('/stores', verifyToken, async (req, res) => {
 app.get('/stores', verifyToken, async (req, res) => {
   try {
     const { search, area, status, marketingOfficer, limit = 10, page = 1 } = req.query;
-
-    let query = {};
-    
-    // Search filter
-    if (search) {
-      query.$or = [
-        { storeName: { $regex: search, $options: 'i' } },
-        { proprietorName: { $regex: search, $options: 'i' } },
-        { storeCode: { $regex: search, $options: 'i' } }
-      ];
-    }
-    
-    // Area filter
-    if (area) {
-      query.area = area;
-    }
-    
-    // Status filter
-    if (status) {
-      query.status = status;
-    }
-    
-    // Marketing officer filter
-    if (marketingOfficer) {
-      query['officers.marketingOfficer'] = marketingOfficer;
-    }
-
-    // For non-admin users, only show their assigned stores
-    if (req.user.role !== 'admin') {
-      query['officers.marketingOfficer'] = req.user.id;
-    }
-
-    // Pagination settings
     const skip = (page - 1) * limit;
 
-    const stores = await Store.find(query)
-      .populate('officers.marketingOfficer', 'name email phone')
-      .populate('createdBy', 'name')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
+    // Base match query
+    const matchQuery = {
+      ...(search && {
+        $or: [
+          { storeName: { $regex: search, $options: 'i' } },
+          { proprietorName: { $regex: search, $options: 'i' } },
+          { storeCode: { $regex: search, $options: 'i' } }
+        ]
+      }),
+      ...(area && { area }),
+      ...(status && { status }),
+      ...(marketingOfficer && { 'officers.marketingOfficer': new mongoose.Types.ObjectId(marketingOfficer) })
+    };
 
-    const totalStores = await Store.countDocuments(query);
+    // Add marketing officer filter for non-admin users
+    if (req.user.role !== 'admin') {
+      matchQuery['officers.marketingOfficer'] = req.user._id;
+    }
+
+    const aggregationPipeline = [
+      // Stage 1: Match stores based on filters
+      { $match: matchQuery },
+
+      // Stage 2: Lookup related orders with calculated totals
+      {
+        $lookup: {
+          from: 'orders',
+          localField: '_id',
+          foreignField: 'store',
+          as: 'orderHistory',
+          pipeline: [
+            {
+              $lookup: {
+                from: 'products',
+                localField: 'products.product',
+                foreignField: '_id',
+                as: 'productDetails'
+              }
+            },
+            {
+              $addFields: {
+                products: {
+                  $map: {
+                    input: '$products',
+                    as: 'product',
+                    in: {
+                      $mergeObjects: [
+                        '$$product',
+                        {
+                          product: {
+                            $arrayElemAt: [
+                              '$productDetails',
+                              { $indexOfArray: ['$productDetails._id', '$$product.product'] }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                },
+                // Calculate order total in the sub-pipeline
+                orderTotal: {
+                  $reduce: {
+                    input: '$products',
+                    initialValue: 0,
+                    in: {
+                      $add: [
+                        '$$value',
+                        {
+                          $multiply: [
+                            '$$this.price',
+                            {
+                              $subtract: [
+                                '$$this.quantity',
+                                {
+                                  $ifNull: [
+                                    {
+                                      $multiply: [
+                                        '$$this.quantity',
+                                        { $divide: [{ $ifNull: ['$$this.discountPercentage', 0] }, 100] }
+                                      ]
+                                    },
+                                    0
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          $multiply: [
+                            { $ifNull: ['$$this.bonusQuantity', 0] },
+                            '$$this.price'
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            { $project: { productDetails: 0 } }
+          ]
+        }
+      },
+
+      // Stage 3: Lookup payments with default empty array
+      {
+        $lookup: {
+          from: 'payments',
+          localField: '_id',
+          foreignField: 'store',
+          as: 'paymentHistory'
+        }
+      },
+
+      // Stage 4: Lookup dues with default empty array
+      {
+        $lookup: {
+          from: 'dues',
+          localField: '_id',
+          foreignField: 'store',
+          as: 'dueHistory'
+        }
+      },
+
+      // Stage 5: Calculate financials with proper null handling
+      {
+        $addFields: {
+          totalFromOrders: {
+            $reduce: {
+              input: '$orderHistory',
+              initialValue: 0,
+              in: {
+                $add: [
+                  '$$value',
+                  { $ifNull: ['$$this.orderTotal', 0] }
+                ]
+              }
+            }
+          },
+          totalFromDues: {
+            $reduce: {
+              input: '$dueHistory',
+              initialValue: 0,
+              in: {
+                $add: [
+                  '$$value',
+                  { $ifNull: ['$$this.amount', 0] }
+                ]
+              }
+            }
+          },
+          totalPaidAmount: {
+            $reduce: {
+              input: '$paymentHistory',
+              initialValue: 0,
+              in: {
+                $add: [
+                  '$$value',
+                  { $ifNull: ['$$this.amount', 0] }
+                ]
+              }
+            }
+          }
+        }
+      },
+      {
+        $addFields: {
+          totalFinalDues: {
+            $subtract: [
+              { $add: [
+                { $ifNull: ['$totalFromOrders', 0] },
+                { $ifNull: ['$totalFromDues', 0] }
+              ]},
+              { $ifNull: ['$totalPaidAmount', 0] }
+            ]
+          }
+        }
+      },
+
+      // Stage 6: Pagination
+      { $skip: skip },
+      { $limit: parseInt(limit) },
+
+      // Stage 7: Additional population with null checks
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'officers.marketingOfficer',
+          foreignField: '_id',
+          as: 'marketingOfficerDetails'
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'createdBy',
+          foreignField: '_id',
+          as: 'createdByDetails'
+        }
+      },
+      {
+        $addFields: {
+          'officers.marketingOfficer': {
+            $ifNull: [
+              { $arrayElemAt: ['$marketingOfficerDetails', 0] },
+              null
+            ]
+          },
+          createdBy: {
+            $ifNull: [
+              { $arrayElemAt: ['$createdByDetails', 0] },
+              null
+            ]
+          }
+        }
+      },
+      { $project: { marketingOfficerDetails: 0, createdByDetails: 0 } }
+    ];
+
+    // Execute aggregation
+    const [stores, totalStores] = await Promise.all([
+      Store.aggregate(aggregationPipeline),
+      Store.countDocuments(matchQuery)
+    ]);
+
     const totalPages = Math.ceil(totalStores / limit);
 
     res.json({
       success: true,
       count: stores.length,
-      stores,
+      stores: stores.map(store => ({
+        ...store,
+        orderHistory: store.orderHistory || [],
+        dueHistory: store.dueHistory || [],
+        paymentHistory: store.paymentHistory || [],
+        totalFromOrders: store.totalFromOrders || 0,
+        totalFromDues: store.totalFromDues || 0,
+        totalPaidAmount: store.totalPaidAmount || 0,
+        totalFinalDues: store.totalFinalDues || 0
+      })),
       pagination: {
         totalStores,
         totalPages,
-        currentPage: page,
-        perPage: limit
+        currentPage: parseInt(page),
+        perPage: parseInt(limit)
       }
     });
 
@@ -837,30 +1033,230 @@ app.get('/stores', verifyToken, async (req, res) => {
   }
 });
 
-// Get Single Store
+// Get Single Store with Full Details
 app.get('/get-stores/:id', verifyToken, async (req, res) => {
   try {
-    const store = await Store.findById(req.params.id)
-    console.log(store)
-    if (!store) {
+    const storeId = req.params.id;
+    const userId = new mongoose.Types.ObjectId(req.user.id);
+    const isAdmin = req.user.role === 'admin';
+
+    // Base match query - admin can access any store, others only their assigned stores
+    const matchQuery = {
+      _id: new mongoose.Types.ObjectId(storeId)
+    };
+
+    if (!isAdmin) {
+      matchQuery.$or = [
+        { 'officers.marketingOfficer': userId },
+        { 'createdBy': userId }
+      ];
+    }
+
+    const aggregationPipeline = [
+      // Stage 1: Match the specific store with access control
+      { $match: matchQuery },
+
+      // Stage 2: Lookup related orders with product details
+      {
+        $lookup: {
+          from: 'orders',
+          localField: '_id',
+          foreignField: 'store',
+          as: 'orderHistory',
+          pipeline: [
+            {
+              $lookup: {
+                from: 'products',
+                localField: 'products.product',
+                foreignField: '_id',
+                as: 'productDetails'
+              }
+            },
+            {
+              $addFields: {
+                products: {
+                  $map: {
+                    input: '$products',
+                    as: 'product',
+                    in: {
+                      $mergeObjects: [
+                        '$$product',
+                        {
+                          product: {
+                            $arrayElemAt: [
+                              '$productDetails',
+                              { $indexOfArray: ['$productDetails._id', '$$product.product'] }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            { $project: { productDetails: 0 } },
+            // Calculate order total
+            {
+              $addFields: {
+                orderTotal: {
+                  $reduce: {
+                    input: '$products',
+                    initialValue: 0,
+                    in: {
+                      $add: [
+                        '$$value',
+                        {
+                          $multiply: [
+                            '$$this.price',
+                            {
+                              $subtract: [
+                                '$$this.quantity',
+                                {
+                                  $multiply: [
+                                    '$$this.quantity',
+                                    { $divide: ['$$this.discountPercentage', 100] }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        { $multiply: ['$$this.bonusQuantity', '$$this.price'] }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+
+      // Stage 3: Lookup payment history
+      {
+        $lookup: {
+          from: 'payments',
+          localField: '_id',
+          foreignField: 'store',
+          as: 'paymentHistory'
+        }
+      },
+
+      // Stage 4: Lookup due history
+      {
+        $lookup: {
+          from: 'dues',
+          localField: '_id',
+          foreignField: 'store',
+          as: 'dueHistory'
+        }
+      },
+
+      // Stage 5: Calculate financials
+      {
+        $addFields: {
+          totalFromOrders: {
+            $reduce: {
+              input: '$orderHistory',
+              initialValue: 0,
+              in: { $add: ['$$value', '$$this.orderTotal'] }
+            }
+          },
+          totalPaidAmount: {
+            $reduce: {
+              input: '$paymentHistory',
+              initialValue: 0,
+              in: { $add: ['$$value', '$$this.amount'] }
+            }
+          },
+          totalFromDues: {
+            $reduce: {
+              input: '$dueHistory',
+              initialValue: 0,
+              in: { $add: ['$$value', '$$this.amount'] }
+            }
+          }
+        }
+      },
+      {
+        $addFields: {
+          totalFinalDues: {
+            $subtract: [
+              { $add: ['$totalFromOrders', '$totalFromDues'] },
+              '$totalPaidAmount'
+            ]
+          },
+          dueHistory: {
+            $concatArrays: [
+              '$dueHistory',
+              {
+                $map: {
+                  input: '$orderHistory',
+                  as: 'order',
+                  in: {
+                    amount: '$$order.orderTotal',
+                    type: 'by_order',
+                    orderId: '$$order._id',
+                    createdAt: '$$order.createdAt',
+                    status: '$$order.status'
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+
+      // Stage 6: Populate user details
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'officers.marketingOfficer',
+          foreignField: '_id',
+          as: 'marketingOfficerDetails'
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'createdBy',
+          foreignField: '_id',
+          as: 'createdByDetails'
+        }
+      },
+      {
+        $addFields: {
+          'officers.marketingOfficer': { $arrayElemAt: ['$marketingOfficerDetails', 0] },
+          createdBy: { $arrayElemAt: ['$createdByDetails', 0] }
+        }
+      },
+      { $project: { marketingOfficerDetails: 0, createdByDetails: 0 } }
+    ];
+
+    const result = await Store.aggregate(aggregationPipeline);
+    
+    if (result.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Store not found'
+        message: 'Store not found or unauthorized access'
       });
     }
 
-    // Check if user has access (admin or assigned marketing officer)
-    if (req.user.role !== 'admin' && 
-        store.officers.marketingOfficer._id.toString() !== req.user.id) {
-      return res.status(403).json({
-        success: false,
-        message: 'Unauthorized access to this store'
-      });
-    }
+    const store = result[0];
 
     res.json({
       success: true,
-      store
+      store: {
+        ...store,
+        orderHistory: store.orderHistory || [],
+        dueHistory: store.dueHistory || [],
+        paymentHistory: store.paymentHistory || [],
+        totalFromOrders: store.totalFromOrders || 0,
+        totalPaidAmount: store.totalPaidAmount || 0,
+        totalFromDues: store.totalFromDues || 0,
+        totalFinalDues: store.totalFinalDues || 0
+      }
     });
 
   } catch (error) {
@@ -964,13 +1360,21 @@ app.delete('/stores/:id', verifyToken, async (req, res) => {
   }
 });
 
+
 // Add Payment to Store
 app.post('/stores/:id/payments', verifyToken, async (req, res) => {
   try {
-    const { amount, method, notes } = req.body;
+    const { amount, paymentMethod, notes, date } = req.body;
     
+    // Validate
+    if (!amount || isNaN(amount)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid amount is required'
+      });
+    }
+
     const store = await Store.findById(req.params.id);
-    
     if (!store) {
       return res.status(404).json({
         success: false,
@@ -978,7 +1382,7 @@ app.post('/stores/:id/payments', verifyToken, async (req, res) => {
       });
     }
 
-    // Check permissions (admin or marketing officer)
+    // Check permissions
     if (req.user.role !== 'admin' && 
         store.officers.marketingOfficer.toString() !== req.user.id) {
       return res.status(403).json({
@@ -987,14 +1391,19 @@ app.post('/stores/:id/payments', verifyToken, async (req, res) => {
       });
     }
 
-    const payment = {
-      amount,
-      method,
+    // Create and save payment
+    const payment = new Payment({
+      store: store._id,
+      amount: parseFloat(amount),
+      paymentMethod: paymentMethod || 'cash',
       notes,
-      recordedBy: req.user.id
-    };
+      recordedBy: req.user.id,
+      date: date || new Date()
+    });
+    await payment.save();
 
-    store.paymentHistory.push(payment);
+    // Add reference to store
+    store.paymentHistory.push(payment._id);
     await store.save();
 
     res.status(201).json({
@@ -1016,10 +1425,17 @@ app.post('/stores/:id/payments', verifyToken, async (req, res) => {
 // Add Due to Store
 app.post('/stores/:id/dues', verifyToken, async (req, res) => {
   try {
-    const { amount, dueDate, reason } = req.body;
+    const { amount, description, dueDate } = req.body;
     
+    // Validate
+    if (!amount || isNaN(amount)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid amount is required'
+      });
+    }
+
     const store = await Store.findById(req.params.id);
-    
     if (!store) {
       return res.status(404).json({
         success: false,
@@ -1027,7 +1443,7 @@ app.post('/stores/:id/dues', verifyToken, async (req, res) => {
       });
     }
 
-    // Check permissions (admin or marketing officer)
+    // Check permissions
     if (req.user.role !== 'admin' && 
         store.officers.marketingOfficer.toString() !== req.user.id) {
       return res.status(403).json({
@@ -1036,14 +1452,18 @@ app.post('/stores/:id/dues', verifyToken, async (req, res) => {
       });
     }
 
-    const due = {
-      amount,
-      dueDate,
-      reason,
+    // Create and save due
+    const due = new Due({
+      store: store._id,
+      amount: parseFloat(amount),
+      description,
+      dueDate: dueDate || new Date(),
       recordedBy: req.user.id
-    };
+    });
+    await due.save();
 
-    store.dueHistory.push(due);
+    // Add reference to store
+    store.dueHistory.push(due._id);
     await store.save();
 
     res.status(201).json({
@@ -1063,35 +1483,257 @@ app.post('/stores/:id/dues', verifyToken, async (req, res) => {
 });
 
 // Get My Stores for Marketing Officer
-app.get('/stores/my-stores',verifyToken, async (req, res) => {
+app.get('/stores/my-stores', verifyToken, async (req, res) => {
   try {
-    const { search, area } = req.query;
-    // Query stores where the logged-in user's ID matches the marketingOfficer field
-    let query = { 'officers.marketingOfficer': req.user.id };
-    // Search filter
-    if (search) {
-      query.$or = [
-        { storeName: { $regex: search, $options: 'i' } },
-        { proprietorName: { $regex: search, $options: 'i' } },
-        { storeCode: { $regex: search, $options: 'i' } }
-      ];
+    const { search, area, limit = 10, page = 1 } = req.query;
+    const skip = (page - 1) * limit;
+
+    // Convert user ID to ObjectId for proper matching
+    const userId = new mongoose.Types.ObjectId(req.user.id);
+
+    // Base query for marketing officer's stores
+    const matchQuery = {
+      'officers.marketingOfficer': userId,  // Use ObjectId for matching
+      ...(search && {
+        $or: [
+          { storeName: { $regex: search, $options: 'i' } },
+          { proprietorName: { $regex: search, $options: 'i' } },
+          { storeCode: { $regex: search, $options: 'i' } }
+        ]
+      }),
+      ...(area && area !== 'all' && { area })
+    };
+
+    // First verify stores exist for this user
+    const storesCount = await Store.countDocuments(matchQuery);
+    
+    if (storesCount === 0) {
+      return res.json({
+        success: true,
+        count: 0,
+        stores: [],
+        message: 'No stores found for this marketing officer',
+        pagination: {
+          totalStores: 0,
+          totalPages: 0,
+          currentPage: page,
+          perPage: limit
+        }
+      });
     }
 
-    // Area filter
-    if (area && area !== 'all') {
-      query.area = area;
-    }
+    const aggregationPipeline = [
+      // Stage 1: Match stores for this marketing officer
+      { $match: matchQuery },
 
-    // Fetch stores with populated marketing officer and created by fields
-    const stores = await Store.find(query)
-      .populate('officers.marketingOfficer', 'name email phone') // Populate marketingOfficer field
-      .populate('createdBy', 'name email') // Populate createdBy field
-      .sort({ createdAt: -1 });
+      // Stage 2: Lookup related orders
+      {
+        $lookup: {
+          from: 'orders',
+          localField: '_id',
+          foreignField: 'store',
+          as: 'orderHistory',
+          pipeline: [
+            {
+              $lookup: {
+                from: 'products',
+                localField: 'products.product',
+                foreignField: '_id',
+                as: 'productDetails'
+              }
+            },
+            {
+              $addFields: {
+                products: {
+                  $map: {
+                    input: '$products',
+                    as: 'product',
+                    in: {
+                      $mergeObjects: [
+                        '$$product',
+                        {
+                          product: {
+                            $arrayElemAt: [
+                              '$productDetails',
+                              { $indexOfArray: ['$productDetails._id', '$$product.product'] }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            { $project: { productDetails: 0 } },
+            // Calculate order total for each order
+            {
+              $addFields: {
+                orderTotal: {
+                  $reduce: {
+                    input: '$products',
+                    initialValue: 0,
+                    in: {
+                      $add: [
+                        '$$value',
+                        {
+                          $multiply: [
+                            '$$this.price',
+                            {
+                              $subtract: [
+                                '$$this.quantity',
+                                {
+                                  $multiply: [
+                                    '$$this.quantity',
+                                    { $divide: ['$$this.discountPercentage', 100] }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        { $multiply: ['$$this.bonusQuantity', '$$this.price'] }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+
+      // Stage 3: Lookup payment history
+      {
+        $lookup: {
+          from: 'payments',
+          localField: '_id',
+          foreignField: 'store',
+          as: 'paymentHistory'
+        }
+      },
+
+      // Stage 4: Lookup due history
+      {
+        $lookup: {
+          from: 'dues',
+          localField: '_id',
+          foreignField: 'store',
+          as: 'dueHistory'
+        }
+      },
+
+      // Stage 5: Calculate financials
+      {
+        $addFields: {
+          totalFromOrders: {
+            $reduce: {
+              input: '$orderHistory',
+              initialValue: 0,
+              in: { $add: ['$$value', '$$this.orderTotal'] }
+            }
+          },
+          totalPaidAmount: {
+            $reduce: {
+              input: '$paymentHistory',
+              initialValue: 0,
+              in: { $add: ['$$value', '$$this.amount'] }
+            }
+          },
+          totalFromDues: {
+            $reduce: {
+              input: '$dueHistory',
+              initialValue: 0,
+              in: { $add: ['$$value', '$$this.amount'] }
+            }
+          }
+        }
+      },
+      {
+        $addFields: {
+          totalFinalDues: {
+            $subtract: [
+              { $add: ['$totalFromOrders', '$totalFromDues'] },
+              '$totalPaidAmount'
+            ]
+          },
+          dueHistory: {
+            $concatArrays: [
+              '$dueHistory',
+              {
+                $map: {
+                  input: '$orderHistory',
+                  as: 'order',
+                  in: {
+                    amount: '$$order.orderTotal',
+                    type: 'by_order',
+                    orderId: '$$order._id',
+                    createdAt: '$$order.createdAt',
+                    status: '$$order.status'
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+
+      // Stage 6: Pagination
+      { $skip: skip },
+      { $limit: parseInt(limit) },
+
+      // Stage 7: Populate user details
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'officers.marketingOfficer',
+          foreignField: '_id',
+          as: 'marketingOfficerDetails'
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'createdBy',
+          foreignField: '_id',
+          as: 'createdByDetails'
+        }
+      },
+      {
+        $addFields: {
+          'officers.marketingOfficer': { $arrayElemAt: ['$marketingOfficerDetails', 0] },
+          createdBy: { $arrayElemAt: ['$createdByDetails', 0] }
+        }
+      },
+      { $project: { marketingOfficerDetails: 0, createdByDetails: 0 } }
+    ];
+
+    // Execute aggregation
+    const [stores, totalStores] = await Promise.all([
+      Store.aggregate(aggregationPipeline),
+      Store.countDocuments(matchQuery)
+    ]);
+
+    const totalPages = Math.ceil(totalStores / limit);
 
     res.json({
       success: true,
       count: stores.length,
-      stores
+      stores: stores.map(store => ({
+        ...store,
+        orderHistory: store.orderHistory || [],
+        dueHistory: store.dueHistory || [],
+        totalFromOrders: store.totalFromOrders || 0,
+        totalPaidAmount: store.totalPaidAmount || 0,
+        totalFromDues: store.totalFromDues || 0,
+        totalFinalDues: store.totalFinalDues || 0
+      })),
+      pagination: {
+        totalStores,
+        totalPages,
+        currentPage: page,
+        perPage: limit
+      }
     });
 
   } catch (error) {
@@ -1395,7 +2037,7 @@ app.get('/api/orders/draft', verifyToken, async (req, res) => {
       status: 'draft',
       createdBy: req.user.id
     }).populate('products.product', 'productName price packSize unit');
-    console.log(order)
+    
     if (!order) {
       return res.json({
         success: true,
