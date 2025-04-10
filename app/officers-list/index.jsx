@@ -14,8 +14,11 @@ const OfficersListScreen = () => {
   const [filterOption, setFilterOption] = useState("all");
   const menuAnchorRef = useRef(null);
 
+console.log(officers)
   // Get unique areas from the officers data
   const uniqueAreas = ["all", ...new Set(officers.map(officer => officer.area))];
+
+
 
   // Filter officers based on search and filter
   const filteredOfficers = officers.filter((officer) => {
@@ -138,7 +141,7 @@ const OfficersListScreen = () => {
                     right={() => (
                       <View style={[styles.dueBadge, { backgroundColor: theme.colors.surfaceVariant }]}>
                         <Text style={[styles.dueBadgeText, { color: theme.colors.primary }]}>
-                          ৳{item.totalDue?.toLocaleString() || '0'}
+                          ৳{item.financials?.netDues?.toLocaleString() || '0'}
                         </Text>
                       </View>
                     )}
@@ -156,7 +159,7 @@ const OfficersListScreen = () => {
                         Code: {item.areaCode}
                       </Text>
                     </View>
-                    <Link href={`/officer-details/${item.id}`} asChild>
+                    <Link href={`/officers-list/${item._id}`} asChild>
                       <TouchableOpacity style={styles.arrowButton}>
                         <MaterialIcons 
                           name="arrow-forward-ios" 

@@ -31,7 +31,7 @@ const OrderDetailsScreen = () => {
   const [confirmDialog, setConfirmDialog] = useState({ visible: false, type: null });
   const [initialLoad, setInitialLoad] = useState(true);
   const fadeAnim = useRef(new Animated.Value(0)).current;
-
+console.log(order)
   const {
     handleGetOrderById,
     handleApproveOrder,
@@ -206,15 +206,15 @@ const OrderDetailsScreen = () => {
             </View>
             <Divider style={[styles.divider, { backgroundColor: theme.colors.outline }]} />
             <View style={styles.row}>
-              <Text>Subtotal:</Text>
+              <Text>Total Amount:</Text>
               <Text>৳{order.orderTotal?.toLocaleString()}</Text>
             </View>
             <View style={styles.row}>
               <Text>Discount:</Text>
-              <Text style={{ color: theme.colors.error }}>-৳{order.totalDiscount?.toLocaleString()} ({order.orderFinalTotal.discountPercentage.toLocaleString()}℅)</Text>
+              <Text style={{ color: theme.colors.error }}>-৳{order?.totalDiscount?.toLocaleString()} </Text>
             </View>
             <View style={[styles.row, { marginTop: 8 }]}>
-              <Text variant="titleSmall">Total:</Text>
+              <Text variant="titleSmall">Subtotal:</Text>
               <Text variant="titleSmall">৳{order.orderFinalTotal?.finalAmount?.toLocaleString()}</Text>
             </View>
             <View style={[styles.row, { marginTop: 8 }]}>
@@ -247,7 +247,7 @@ const OrderDetailsScreen = () => {
                     </Text>
                   </View>
                   <Text variant="bodyLarge" style={styles.productTotal}>
-                    ৳{(product.quantity * product.price)?.toLocaleString()}
+                    ৳{(product.finalAmount)?.toLocaleString()}
                   </Text>
                 </View>
                 {index < order.products.length - 1 && (

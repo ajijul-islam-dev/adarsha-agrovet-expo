@@ -538,33 +538,290 @@ app.get('/officers', verifyToken, async (req, res) => {
   try {
     const { search, area } = req.query;
     
-    // Base query to only get users with officer role
-    let query = { role: 'officer' };
+    // Base query
+    let matchQuery = { role: 'officer' };
     
-    // Add search conditions if search parameter exists
+    // Search conditions
     if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: 'i' } },  // Case-insensitive name search
-        { email: { $regex: search, $options: 'i' } }, // Case-insensitive email search
-        { phone: { $regex: search, $options: 'i' } },  // Case-insensitive phone search
-        { areaCode: { $regex: search, $options: 'i' } } // Case-insensitive area code search
+      matchQuery.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { phone: { $regex: search, $options: 'i' } },
+        { areaCode: { $regex: search, $options: 'i' } }
       ];
     }
     
-    // Add area filter if area parameter exists and is not 'all'
+    // Area filter
     if (area && area !== 'all') {
-      query.area = area;
+      matchQuery.area = area;
     }
 
-    // Execute query with password field excluded
-    const officers = await User.find(query)
-      .select('-password -__v')  // Exclude sensitive fields
-      .sort({ createdAt: -1 });  // Sort by newest first
+    const aggregationPipeline = [
+      // Stage 1: Match officers based on filters
+      { $match: matchQuery },
+
+      // Stage 2: Lookup stores managed by this officer
+      {
+        $lookup: {
+          from: 'stores',
+          localField: '_id',
+          foreignField: 'officers.marketingOfficer',
+          as: 'managedStores'
+        }
+      },
+
+      // Stage 3: Unwind stores for proper joining
+      { $unwind: { path: '$managedStores', preserveNullAndEmptyArrays: true } },
+
+      // Stage 4: Lookup orders for each store with product details
+      {
+        $lookup: {
+          from: 'orders',
+          localField: 'managedStores._id',
+          foreignField: 'store',
+          as: 'storeOrders',
+          pipeline: [
+            {
+              $lookup: {
+                from: 'products',
+                localField: 'products.product',
+                foreignField: '_id',
+                as: 'productDetails'
+              }
+            },
+            {
+              $addFields: {
+                products: {
+                  $map: {
+                    input: '$products',
+                    as: 'product',
+                    in: {
+                      $mergeObjects: [
+                        '$$product',
+                        {
+                          product: {
+                            $arrayElemAt: [
+                              '$productDetails',
+                              { $indexOfArray: ['$productDetails._id', '$$product.product'] }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                },
+                orderTotal: {
+                  $reduce: {
+                    input: '$products',
+                    initialValue: 0,
+                    in: {
+                      $add: [
+                        '$$value',
+                        {
+                          $multiply: [
+                            '$$this.price',
+                            {
+                              $subtract: [
+                                '$$this.quantity',
+                                {
+                                  $multiply: [
+                                    '$$this.quantity',
+                                    { $divide: [{ $ifNull: ['$$this.discountPercentage', 0] }, 100] }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          $multiply: [
+                            { $ifNull: ['$$this.bonusQuantity', 0] },
+                            '$$this.price'
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            { $project: { productDetails: 0 } }
+          ]
+        }
+      },
+
+      // Stage 5: Lookup payments for each store
+      {
+        $lookup: {
+          from: 'payments',
+          localField: 'managedStores._id',
+          foreignField: 'store',
+          as: 'storePayments'
+        }
+      },
+
+      // Stage 6: Lookup dues for each store
+      {
+        $lookup: {
+          from: 'dues',
+          localField: 'managedStores._id',
+          foreignField: 'store',
+          as: 'storeDues'
+        }
+      },
+
+      // Stage 7: Combine orders and dues into comprehensive due history
+      {
+        $addFields: {
+          'managedStores.combinedDues': {
+            $concatArrays: [
+              '$storeDues',
+              {
+                $map: {
+                  input: '$storeOrders',
+                  as: 'order',
+                  in: {
+                    amount: '$$order.orderTotal',
+                    type: 'by_order',
+                    orderId: '$$order._id',
+                    createdAt: '$$order.createdAt',
+                    status: '$$order.status'
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+
+      // Stage 8: Group back by officer with full history arrays
+      {
+        $group: {
+          _id: '$_id',
+          officerData: { $first: '$$ROOT' },
+          
+          // Financial totals
+          totalOrdersValue: { $sum: { $sum: '$storeOrders.orderTotal' } },
+          totalPayments: { $sum: { $sum: '$storePayments.amount' } },
+          totalManualDues: { $sum: { $sum: '$storeDues.amount' } },
+          
+          // Full history arrays
+          allOrders: { $push: '$storeOrders' },
+          allPayments: { $push: '$storePayments' },
+          allDues: { $push: '$storeDues' },
+          allCombinedDues: { $push: '$managedStores.combinedDues' },
+          
+          // Counts
+          storeCount: { $sum: { $cond: [{ $ifNull: ['$managedStores._id', false] }, 1, 0] } },
+          orderCount: { $sum: { $size: '$storeOrders' } },
+          paymentCount: { $sum: { $size: '$storePayments' } },
+          dueCount: { $sum: { $size: '$storeDues' } }
+        }
+      },
+
+      // Stage 9: Flatten the history arrays
+      {
+        $addFields: {
+          orderHistory: { $reduce: { input: '$allOrders', initialValue: [], in: { $concatArrays: ['$$value', '$$this'] } } },
+          paymentHistory: { $reduce: { input: '$allPayments', initialValue: [], in: { $concatArrays: ['$$value', '$$this'] } } },
+          dueHistory: { $reduce: { input: '$allDues', initialValue: [], in: { $concatArrays: ['$$value', '$$this'] } } },
+          combinedDueHistory: { $reduce: { input: '$allCombinedDues', initialValue: [], in: { $concatArrays: ['$$value', '$$this'] } } }
+        }
+      },
+
+      // Stage 10: Calculate net dues
+      {
+        $addFields: {
+          netDues: {
+            $subtract: [
+              { $add: ['$totalOrdersValue', '$totalManualDues'] },
+              '$totalPayments'
+            ]
+          },
+          netDuesCombined: {
+            $subtract: [
+              { $add: ['$totalOrdersValue', '$totalManualDues'] },
+              '$totalPayments'
+            ]
+          }
+        }
+      },
+
+      // Stage 11: Merge officer data with calculated fields
+      {
+        $replaceRoot: {
+          newRoot: {
+            $mergeObjects: [
+              '$officerData',
+              {
+                financials: {
+                  totalOrdersValue: '$totalOrdersValue',
+                  totalPayments: '$totalPayments',
+                  totalManualDues: '$totalManualDues',
+                  netDues: '$netDues',
+                  netDuesCombined: '$netDuesCombined',
+                  storeCount: '$storeCount',
+                  orderCount: '$orderCount',
+                  paymentCount: '$paymentCount',
+                  dueCount: '$dueCount'
+                },
+                histories: {
+                  orders: '$orderHistory',
+                  payments: '$paymentHistory',
+                  dues: '$dueHistory',
+                  combinedDues: '$combinedDueHistory'
+                }
+              }
+            ]
+          }
+        }
+      },
+
+      // Stage 12: Final projection
+      {
+        $project: {
+          password: 0,
+          __v: 0,
+          managedStores: 0,
+          allOrders: 0,
+          allPayments: 0,
+          allDues: 0,
+          allCombinedDues: 0
+        }
+      },
+
+      // Stage 13: Sort by newest first
+      { $sort: { createdAt: -1 } }
+    ];
+
+    const officers = await User.aggregate(aggregationPipeline);
+
+    // Format response with proper defaults
+    const formattedOfficers = officers.map(officer => ({
+      ...officer,
+      financials: {
+        totalOrdersValue: officer.financials?.totalOrdersValue || 0,
+        totalPayments: officer.financials?.totalPayments || 0,
+        totalManualDues: officer.financials?.totalManualDues || 0,
+        netDues: officer.financials?.netDues || 0,
+        netDuesCombined: officer.financials?.netDuesCombined || 0,
+        storeCount: officer.financials?.storeCount || 0,
+        orderCount: officer.financials?.orderCount || 0,
+        paymentCount: officer.financials?.paymentCount || 0,
+        dueCount: officer.financials?.dueCount || 0
+      },
+      histories: {
+        orders: officer.histories?.orders || [],
+        payments: officer.histories?.payments || [],
+        dues: officer.histories?.dues || [],
+        combinedDues: officer.histories?.combinedDues || []
+      }
+    }));
 
     res.json({
       success: true,
-      count: officers.length,
-      officers
+      count: formattedOfficers.length,
+      officers: formattedOfficers
     });
     
   } catch (error) {
@@ -572,6 +829,363 @@ app.get('/officers', verifyToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch officers',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+app.get('/officers/:id', verifyToken, async (req, res) => {
+  try {
+    // Validate ObjectId format if using MongoDB
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid officer ID format'
+      });
+    }
+
+    const aggregationPipeline = [
+      // Stage 1: Match the specific officer
+      { 
+        $match: { 
+          _id: new mongoose.Types.ObjectId(req.params.id),
+          role: 'officer' 
+        } 
+      },
+
+      // Stage 2: Lookup stores managed by this officer
+      {
+        $lookup: {
+          from: 'stores',
+          localField: '_id',
+          foreignField: 'officers.marketingOfficer',
+          as: 'managedStores'
+        }
+      },
+
+      // Stage 3: Unwind stores for proper joining
+      { $unwind: { path: '$managedStores', preserveNullAndEmptyArrays: true } },
+
+      // Stage 4: Lookup orders for each store with product details (last 30 days)
+      {
+        $lookup: {
+          from: 'orders',
+          let: { storeId: '$managedStores._id' },
+          pipeline: [
+            { 
+              $match: { 
+                $expr: { $eq: ['$store', '$$storeId'] },
+                createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
+              } 
+            },
+            {
+              $lookup: {
+                from: 'products',
+                localField: 'products.product',
+                foreignField: '_id',
+                as: 'productDetails'
+              }
+            },
+            {
+              $addFields: {
+                products: {
+                  $map: {
+                    input: '$products',
+                    as: 'product',
+                    in: {
+                      $mergeObjects: [
+                        '$$product',
+                        {
+                          product: {
+                            $arrayElemAt: [
+                              '$productDetails',
+                              { $indexOfArray: ['$productDetails._id', '$$product.product'] }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                },
+                orderTotal: {
+                  $reduce: {
+                    input: '$products',
+                    initialValue: 0,
+                    in: {
+                      $add: [
+                        '$$value',
+                        {
+                          $multiply: [
+                            '$$this.price',
+                            {
+                              $subtract: [
+                                '$$this.quantity',
+                                {
+                                  $multiply: [
+                                    '$$this.quantity',
+                                    { $divide: [{ $ifNull: ['$$this.discountPercentage', 0] }, 100] }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          $multiply: [
+                            { $ifNull: ['$$this.bonusQuantity', 0] },
+                            '$$this.price'
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            { $project: { productDetails: 0 } },
+            { $sort: { createdAt: -1 } }
+          ],
+          as: 'storeOrders'
+        }
+      },
+
+      // Stage 5: Lookup payments for each store (last 30 days)
+      {
+        $lookup: {
+          from: 'payments',
+          let: { storeId: '$managedStores._id' },
+          pipeline: [
+            { 
+              $match: { 
+                $expr: { $eq: ['$store', '$$storeId'] },
+                date: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
+              } 
+            },
+            { $sort: { date: -1 } }
+          ],
+          as: 'storePayments'
+        }
+      },
+
+      // Stage 6: Lookup dues for each store (last 30 days)
+      {
+        $lookup: {
+          from: 'dues',
+          let: { storeId: '$managedStores._id' },
+          pipeline: [
+            { 
+              $match: { 
+                $expr: { $eq: ['$store', '$$storeId'] },
+                date: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
+              } 
+            },
+            { $sort: { date: -1 } }
+          ],
+          as: 'storeDues'
+        }
+      },
+
+      // Stage 7: Lookup tasks assigned to this officer
+      {
+        $lookup: {
+          from: 'tasks',
+          localField: '_id',
+          foreignField: 'assignedTo',
+          as: 'tasks',
+          pipeline: [
+            { $sort: { dueDate: 1 } }, // Sort by due date ascending
+            { $limit: 20 } // Limit to most recent 20 tasks
+          ]
+        }
+      },
+
+      // Stage 8: Lookup activities performed by this officer
+      {
+        $lookup: {
+          from: 'activities',
+          localField: '_id',
+          foreignField: 'officer',
+          as: 'activities',
+          pipeline: [
+            { $sort: { date: -1 } }, // Sort by most recent first
+            { $limit: 20 } // Limit to most recent 20 activities
+          ]
+        }
+      },
+
+      // Stage 9: Combine orders and dues into comprehensive due history
+      {
+        $addFields: {
+          'managedStores.combinedDues': {
+            $concatArrays: [
+              '$storeDues',
+              {
+                $map: {
+                  input: '$storeOrders',
+                  as: 'order',
+                  in: {
+                    amount: '$$order.orderTotal',
+                    type: 'by_order',
+                    orderId: '$$order._id',
+                    createdAt: '$$order.createdAt',
+                    status: '$$order.status'
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+
+      // Stage 10: Group back by officer with full history arrays
+      {
+        $group: {
+          _id: '$_id',
+          officerData: { $first: '$$ROOT' },
+          
+          // Financial totals
+          totalOrdersValue: { $sum: { $sum: '$storeOrders.orderTotal' } },
+          totalPayments: { $sum: { $sum: '$storePayments.amount' } },
+          totalManualDues: { $sum: { $sum: '$storeDues.amount' } },
+          
+          // Store information
+          stores: { $push: '$managedStores' },
+          
+          // Full history arrays
+          allOrders: { $push: '$storeOrders' },
+          allPayments: { $push: '$storePayments' },
+          allDues: { $push: '$storeDues' },
+          allCombinedDues: { $push: '$managedStores.combinedDues' },
+          
+          // Counts
+          storeCount: { $sum: { $cond: [{ $ifNull: ['$managedStores._id', false] }, 1, 0] } },
+          orderCount: { $sum: { $size: '$storeOrders' } },
+          paymentCount: { $sum: { $size: '$storePayments' } },
+          dueCount: { $sum: { $size: '$storeDues' } }
+        }
+      },
+
+      // Stage 11: Flatten the history arrays
+      {
+        $addFields: {
+          orderHistory: { $reduce: { input: '$allOrders', initialValue: [], in: { $concatArrays: ['$$value', '$$this'] } } },
+          paymentHistory: { $reduce: { input: '$allPayments', initialValue: [], in: { $concatArrays: ['$$value', '$$this'] } } },
+          dueHistory: { $reduce: { input: '$allDues', initialValue: [], in: { $concatArrays: ['$$value', '$$this'] } } },
+          combinedDueHistory: { $reduce: { input: '$allCombinedDues', initialValue: [], in: { $concatArrays: ['$$value', '$$this'] } } }
+        }
+      },
+
+      // Stage 12: Calculate net dues
+      {
+        $addFields: {
+          netDues: {
+            $subtract: [
+              { $add: ['$totalOrdersValue', '$totalManualDues'] },
+              '$totalPayments'
+            ]
+          },
+          netDuesCombined: {
+            $subtract: [
+              { $add: ['$totalOrdersValue', '$totalManualDues'] },
+              '$totalPayments'
+            ]
+          }
+        }
+      },
+
+      // Stage 13: Merge officer data with calculated fields
+      {
+        $replaceRoot: {
+          newRoot: {
+            $mergeObjects: [
+              '$officerData',
+              {
+                financials: {
+                  totalOrdersValue: '$totalOrdersValue',
+                  totalPayments: '$totalPayments',
+                  totalManualDues: '$totalManualDues',
+                  netDues: '$netDues',
+                  netDuesCombined: '$netDuesCombined',
+                  storeCount: '$storeCount',
+                  orderCount: '$orderCount',
+                  paymentCount: '$paymentCount',
+                  dueCount: '$dueCount'
+                },
+                histories: {
+                  orders: '$orderHistory',
+                  payments: '$paymentHistory',
+                  dues: '$dueHistory',
+                  combinedDues: '$combinedDueHistory'
+                },
+                stores: '$stores',
+                tasks: '$officerData.tasks',
+                activities: '$officerData.activities'
+              }
+            ]
+          }
+        }
+      },
+
+      // Stage 14: Final projection
+      {
+        $project: {
+          password: 0,
+          __v: 0,
+          managedStores: 0,
+          allOrders: 0,
+          allPayments: 0,
+          allDues: 0,
+          allCombinedDues: 0
+        }
+      }
+    ];
+
+    const result = await User.aggregate(aggregationPipeline);
+
+    if (result.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Officer not found'
+      });
+    }
+
+    const officer = result[0];
+
+    // Format response with proper defaults
+    const formattedOfficer = {
+      ...officer,
+      financials: {
+        totalOrdersValue: officer.financials?.totalOrdersValue || 0,
+        totalPayments: officer.financials?.totalPayments || 0,
+        totalManualDues: officer.financials?.totalManualDues || 0,
+        netDues: officer.financials?.netDues || 0,
+        netDuesCombined: officer.financials?.netDuesCombined || 0,
+        storeCount: officer.financials?.storeCount || 0,
+        orderCount: officer.financials?.orderCount || 0,
+        paymentCount: officer.financials?.paymentCount || 0,
+        dueCount: officer.financials?.dueCount || 0
+      },
+      histories: {
+        orders: officer.histories?.orders || [],
+        payments: officer.histories?.payments || [],
+        dues: officer.histories?.dues || [],
+        combinedDues: officer.histories?.combinedDues || []
+      },
+      stores: officer.stores || [],
+      tasks: officer.tasks || [],
+      activities: officer.activities || []
+    };
+
+    res.json({
+      success: true,
+      officer: formattedOfficer
+    });
+
+  } catch (error) {
+    console.error('Get officer details error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch officer details',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }

@@ -37,174 +37,396 @@ const formatCurrency = (amount) => {
 };
 
 // Tab Components
-const OverviewTab = ({ currentStore, id, theme, onRefresh, refreshing }) => (
-  <ScrollView 
-    contentContainerStyle={styles.tabContentContainer}
-    refreshControl={
-      <RefreshControl
-        refreshing={refreshing}
-        onRefresh={onRefresh}
-      />
+const OverviewTab = ({ currentStore, id, theme, onRefresh, refreshing }) => {
+  const { handleAddStorePayment, handleAddStoreDue, showMessage } = useContext(ServicesProvider);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showDueModal, setShowDueModal] = useState(false);
+  const [paymentData, setPaymentData] = useState({
+    amount: '',
+    paymentMethod: 'cash',
+    notes: '',
+    date: new Date()
+  });
+  const [dueData, setDueData] = useState({
+    amount: '',
+    description: '',
+    date: new Date()
+  });
+  const [showPaymentDatePicker, setShowPaymentDatePicker] = useState(false);
+  const [showDueDatePicker, setShowDueDatePicker] = useState(false);
+  const [submittingPayment, setSubmittingPayment] = useState(false);
+  const [submittingDue, setSubmittingDue] = useState(false);
+
+  const handlePaymentSubmit = async () => {
+    if (!paymentData.amount || isNaN(paymentData.amount)) {
+      showMessage('Please enter a valid amount', 'error');
+      return;
     }
-  >
-    <Card style={[styles.summaryCard, { backgroundColor: theme.colors.surface }]}>
-      <Card.Title 
-        title="Financial Summary" 
-        titleVariant="titleMedium" 
-        titleStyle={{ color: theme.colors.primary }}
-        left={() => <MaterialCommunityIcons name="finance" size={24} color={theme.colors.primary} />}
-      />
-      <Card.Content>
-        <View style={styles.summaryRow}>
-          <View style={styles.summaryItem}>
-            <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>
-              Total Orders
-            </Text>
-            <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]}>
-              {formatCurrency(currentStore?.totalFromOrders || 0)}
-            </Text>
-          </View>
-          <View style={styles.summaryItem}>
-            <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>
-              Total Payments
-            </Text>
-            <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]}>
-              {formatCurrency(currentStore?.totalPaidAmount || 0)}
-            </Text>
-          </View>
-        </View>
-        <View style={styles.summaryRow}>
-          <View style={styles.summaryItem}>
-            <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>
-              Total Dues
-            </Text>
-            <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]}>
-              {formatCurrency(currentStore?.totalFromDues || 0)}
-            </Text>
-          </View>
-          <View style={[styles.summaryItem, styles.highlightItem]}>
-            <Text style={[styles.summaryLabel, { color: theme.colors.onPrimaryContainer }]}>
-              Current Balance
-            </Text>
-            <Text style={[styles.summaryValue, { color: theme.colors.onPrimaryContainer, fontWeight: 'bold' }]}>
-              {formatCurrency(currentStore?.totalFinalDues || 0)}
-            </Text>
-          </View>
-        </View>
-      </Card.Content>
-    </Card>
 
-    <Card style={[styles.quickActionsCard, { backgroundColor: theme.colors.surface }]}>
-      <Card.Title 
-        title="Quick Actions" 
-        titleVariant="titleMedium" 
-        titleStyle={{ color: theme.colors.primary }}
-        left={() => <MaterialCommunityIcons name="lightning-bolt" size={24} color={theme.colors.primary} />}
-      />
-      <Card.Content style={styles.quickActionsContent}>
-        <Button
-          mode="contained"
-          icon="cash-plus"
-          style={styles.quickActionButton}
-          contentStyle={styles.buttonContent}
-          labelStyle={styles.buttonLabel}
-          onPress={() => router.push(`/stores/${id}/add-payment`)}
-        >
-          Payment
-        </Button>
-        <Button
-          mode="contained"
-          icon="cart-plus"
-          style={styles.quickActionButton}
-          contentStyle={styles.buttonContent}
-          labelStyle={styles.buttonLabel}
-          onPress={() => router.push({
-              pathname: "/product-stock",
-              params: { storeId: id, name: currentStore.storeName }
-            })}
-        >
-          New Order
-        </Button>
-        <Button
-          mode="contained"
-          icon="note-plus"
-          style={styles.quickActionButton}
-          contentStyle={styles.buttonContent}
-          labelStyle={styles.buttonLabel}
-          onPress={() => router.push(`/stores/${id}/add-due`)}
-        >
-          Add Due
-        </Button>
-      </Card.Content>
-    </Card>
+    setSubmittingPayment(true);
+    try {
+      await handleAddStorePayment(id, {
+        ...paymentData,
+        amount: parseFloat(paymentData.amount),
+        date: paymentData.date.toISOString()
+      });
+      setShowPaymentModal(false);
+      setPaymentData({
+        amount: '',
+        paymentMethod: 'cash',
+        notes: '',
+        date: new Date()
+      });
+      onRefresh();
+    } catch (error) {
+      showMessage('Failed to add payment', 'error');
+    } finally {
+      setSubmittingPayment(false);
+    }
+  };
 
-    <Card style={[styles.infoCard, { backgroundColor: theme.colors.surface }]}>
-      <Card.Title 
-        title="Store Information" 
-        titleVariant="titleMedium" 
-        titleStyle={{ color: theme.colors.primary }}
-        left={() => <MaterialCommunityIcons name="information" size={24} color={theme.colors.primary} />}
-      />
-      <Card.Content>
-        <View style={styles.infoRow}>
-          <MaterialCommunityIcons
-            name="store"
-            size={20}
-            color={theme.colors.primary}
-            style={styles.infoIcon}
+  const handleDueSubmit = async () => {
+    if (!dueData.amount || isNaN(dueData.amount)) {
+      showMessage('Please enter a valid amount', 'error');
+      return;
+    }
+
+    setSubmittingDue(true);
+    try {
+      await handleAddStoreDue(id, {
+        ...dueData,
+        amount: parseFloat(dueData.amount),
+        date: dueData.date.toISOString()
+      });
+      setShowDueModal(false);
+      setDueData({
+        amount: '',
+        description: '',
+        date: new Date()
+      });
+      onRefresh();
+    } catch (error) {
+      showMessage('Failed to add due', 'error');
+    } finally {
+      setSubmittingDue(false);
+    }
+  };
+
+  return (
+    <>
+      <ScrollView 
+        contentContainerStyle={styles.tabContentContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
           />
-          <Text style={[styles.infoText, { color: theme.colors.onSurface }]}>
-            {currentStore?.storeName || 'N/A'}
-          </Text>
-        </View>
-        <View style={styles.infoRow}>
-          <MaterialCommunityIcons
-            name="account"
-            size={20}
-            color={theme.colors.primary}
-            style={styles.infoIcon}
+        }
+      >
+        <Card style={[styles.summaryCard, { backgroundColor: theme.colors.surface }]}>
+          <Card.Title 
+            title="Financial Summary" 
+            titleVariant="titleMedium" 
+            titleStyle={{ color: theme.colors.primary }}
+            left={() => <MaterialCommunityIcons name="finance" size={24} color={theme.colors.primary} />}
           />
-          <Text style={[styles.infoText, { color: theme.colors.onSurface }]}>
-            {currentStore?.proprietorName || 'N/A'}
-          </Text>
-        </View>
-        <View style={styles.infoRow}>
-          <MaterialCommunityIcons
-            name="map-marker"
-            size={20}
-            color={theme.colors.primary}
-            style={styles.infoIcon}
+          <Card.Content>
+            <View style={styles.summaryRow}>
+              <View style={styles.summaryItem}>
+                <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>
+                  Total Orders
+                </Text>
+                <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]}>
+                  {formatCurrency(currentStore?.totalFromOrders || 0)}
+                </Text>
+              </View>
+              <View style={styles.summaryItem}>
+                <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>
+                  Total Payments
+                </Text>
+                <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]}>
+                  {formatCurrency(currentStore?.totalPaidAmount || 0)}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.summaryRow}>
+              <View style={styles.summaryItem}>
+                <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>
+                  Total Dues
+                </Text>
+                <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]}>
+                  {formatCurrency(currentStore?.totalFromDues || 0)}
+                </Text>
+              </View>
+              <View style={[styles.summaryItem, styles.highlightItem]}>
+                <Text style={[styles.summaryLabel, { color: theme.colors.onPrimaryContainer }]}>
+                  Current Balance
+                </Text>
+                <Text style={[styles.summaryValue, { color: theme.colors.onPrimaryContainer, fontWeight: 'bold' }]}>
+                  {formatCurrency(currentStore?.totalFinalDues || 0)}
+                </Text>
+              </View>
+            </View>
+          </Card.Content>
+        </Card>
+
+        <Card style={[styles.quickActionsCard, { backgroundColor: theme.colors.surface }]}>
+          <Card.Title 
+            title="Quick Actions" 
+            titleVariant="titleMedium" 
+            titleStyle={{ color: theme.colors.primary }}
+            left={() => <MaterialCommunityIcons name="lightning-bolt" size={24} color={theme.colors.primary} />}
           />
-          <Text style={[styles.infoText, { color: theme.colors.onSurface }]}>
-            {currentStore?.address || 'N/A'}, {currentStore?.area || 'N/A'}
-          </Text>
-        </View>
-        <View style={styles.infoRow}>
-          <MaterialCommunityIcons
-            name="phone"
-            size={20}
-            color={theme.colors.primary}
-            style={styles.infoIcon}
+          <Card.Content style={styles.quickActionsContent}>
+            <Button
+              mode="contained"
+              icon="cash-plus"
+              style={styles.quickActionButton}
+              contentStyle={styles.buttonContent}
+              labelStyle={styles.buttonLabel}
+              onPress={() => setShowPaymentModal(true)}
+            >
+              Payment
+            </Button>
+            <Button
+              mode="contained"
+              icon="cart-plus"
+              style={styles.quickActionButton}
+              contentStyle={styles.buttonContent}
+              labelStyle={styles.buttonLabel}
+              onPress={() => router.push({
+                  pathname: "/product-stock",
+                  params: { storeId: id, name: currentStore.storeName }
+                })}
+            >
+              New Order
+            </Button>
+            <Button
+              mode="contained"
+              icon="note-plus"
+              style={styles.quickActionButton}
+              contentStyle={styles.buttonContent}
+              labelStyle={styles.buttonLabel}
+              onPress={() => setShowDueModal(true)}
+            >
+              Add Due
+            </Button>
+          </Card.Content>
+        </Card>
+
+        <Card style={[styles.infoCard, { backgroundColor: theme.colors.surface }]}>
+          <Card.Title 
+            title="Store Information" 
+            titleVariant="titleMedium" 
+            titleStyle={{ color: theme.colors.primary }}
+            left={() => <MaterialCommunityIcons name="information" size={24} color={theme.colors.primary} />}
           />
-          <Text style={[styles.infoText, { color: theme.colors.onSurface }]}>
-            {currentStore?.contactNumber || 'N/A'}
+          <Card.Content>
+            <View style={styles.infoRow}>
+              <MaterialCommunityIcons
+                name="store"
+                size={20}
+                color={theme.colors.primary}
+                style={styles.infoIcon}
+              />
+              <Text style={[styles.infoText, { color: theme.colors.onSurface }]}>
+                {currentStore?.storeName || 'N/A'}
+              </Text>
+            </View>
+            <View style={styles.infoRow}>
+              <MaterialCommunityIcons
+                name="account"
+                size={20}
+                color={theme.colors.primary}
+                style={styles.infoIcon}
+              />
+              <Text style={[styles.infoText, { color: theme.colors.onSurface }]}>
+                {currentStore?.proprietorName || 'N/A'}
+              </Text>
+            </View>
+            <View style={styles.infoRow}>
+              <MaterialCommunityIcons
+                name="map-marker"
+                size={20}
+                color={theme.colors.primary}
+                style={styles.infoIcon}
+              />
+              <Text style={[styles.infoText, { color: theme.colors.onSurface }]}>
+                {currentStore?.address || 'N/A'}, {currentStore?.area || 'N/A'}
+              </Text>
+            </View>
+            <View style={styles.infoRow}>
+              <MaterialCommunityIcons
+                name="phone"
+                size={20}
+                color={theme.colors.primary}
+                style={styles.infoIcon}
+              />
+              <Text style={[styles.infoText, { color: theme.colors.onSurface }]}>
+                {currentStore?.contactNumber || 'N/A'}
+              </Text>
+            </View>
+            <View style={styles.infoRow}>
+              <MaterialCommunityIcons
+                name="identifier"
+                size={20}
+                color={theme.colors.primary}
+                style={styles.infoIcon}
+              />
+              <Text style={[styles.infoText, { color: theme.colors.onSurface }]}>
+                Store Code: {currentStore?.storeCode || 'N/A'}
+              </Text>
+            </View>
+          </Card.Content>
+        </Card>
+      </ScrollView>
+
+      {/* Payment Modal */}
+      <Modal 
+        visible={showPaymentModal} 
+        onDismiss={() => setShowPaymentModal(false)}
+        contentContainerStyle={[styles.modalContainer, { backgroundColor: theme.colors.background }]}
+      >
+        <Text style={[styles.modalTitle, { color: theme.colors.primary }]}>Add Payment</Text>
+        
+        <TextInput
+          label="Amount"
+          value={paymentData.amount}
+          onChangeText={(text) => setPaymentData({...paymentData, amount: text.replace(/[^0-9.]/g, '')})}
+          inputMode="numeric"
+          style={styles.modalInput}
+          mode="outlined"
+        />
+
+        <TextInput
+          label="Payment Method"
+          value={paymentData.paymentMethod}
+          onChangeText={(text) => setPaymentData({...paymentData, paymentMethod: text})}
+          style={styles.modalInput}
+          mode="outlined"
+        />
+
+        <TextInput
+          label="Notes"
+          value={paymentData.notes}
+          onChangeText={(text) => setPaymentData({...paymentData, notes: text})}
+          style={styles.modalInput}
+          mode="outlined"
+          multiline
+        />
+
+        <TouchableOpacity 
+          onPress={() => setShowPaymentDatePicker(true)}
+          style={[styles.datePickerButton, { borderColor: theme.colors.primary }]}
+        >
+          <Text style={{ color: theme.colors.onSurface }}>
+            {paymentData.date.toLocaleDateString()}
           </Text>
-        </View>
-        <View style={styles.infoRow}>
-          <MaterialCommunityIcons
-            name="identifier"
-            size={20}
-            color={theme.colors.primary}
-            style={styles.infoIcon}
+        </TouchableOpacity>
+
+        {showPaymentDatePicker && (
+          <DateTimePicker
+            value={paymentData.date}
+            mode="date"
+            display="default"
+            onChange={(event, date) => {
+              setShowPaymentDatePicker(false);
+              if (date) {
+                setPaymentData({...paymentData, date});
+              }
+            }}
           />
-          <Text style={[styles.infoText, { color: theme.colors.onSurface }]}>
-            Store Code: {currentStore?.storeCode || 'N/A'}
-          </Text>
+        )}
+
+        <View style={styles.modalButtonContainer}>
+          <Button 
+            mode="outlined" 
+            onPress={() => setShowPaymentModal(false)}
+            style={styles.modalButton}
+          >
+            Cancel
+          </Button>
+          <Button 
+            mode="contained" 
+            onPress={handlePaymentSubmit}
+            style={styles.modalButton}
+            loading={submittingPayment}
+          >
+            Submit Payment
+          </Button>
         </View>
-      </Card.Content>
-    </Card>
-  </ScrollView>
-);
+      </Modal>
+
+      {/* Due Modal */}
+      <Modal 
+        visible={showDueModal} 
+        onDismiss={() => setShowDueModal(false)}
+        contentContainerStyle={[styles.modalContainer, { backgroundColor: theme.colors.background }]}
+      >
+        <Text style={[styles.modalTitle, { color: theme.colors.primary }]}>Add Due</Text>
+        
+        <TextInput
+          label="Amount"
+          value={dueData.amount}
+          onChangeText={(text) => setDueData({...dueData, amount: text.replace(/[^0-9.]/g, '')})}
+          inputMode="numeric"
+          style={styles.modalInput}
+          mode="outlined"
+        />
+
+        <TextInput
+          label="Description"
+          value={dueData.description}
+          onChangeText={(text) => setDueData({...dueData, description: text})}
+          style={styles.modalInput}
+          mode="outlined"
+          multiline
+        />
+
+        <TouchableOpacity 
+          onPress={() => setShowDueDatePicker(true)}
+          style={[styles.datePickerButton, { borderColor: theme.colors.primary }]}
+        >
+          <Text style={{ color: theme.colors.onSurface }}>
+            {dueData.date.toLocaleDateString()}
+          </Text>
+        </TouchableOpacity>
+
+        {showDueDatePicker && (
+          <DateTimePicker
+            value={dueData.date}
+            mode="date"
+            display="default"
+            onChange={(event, date) => {
+              setShowDueDatePicker(false);
+              if (date) {
+                setDueData({...dueData, date});
+              }
+            }}
+          />
+        )}
+
+        <View style={styles.modalButtonContainer}>
+          <Button 
+            mode="outlined" 
+            onPress={() => setShowDueModal(false)}
+            style={styles.modalButton}
+          >
+            Cancel
+          </Button>
+          <Button 
+            mode="contained" 
+            onPress={handleDueSubmit}
+            style={styles.modalButton}
+            loading={submittingDue}
+          >
+            Submit Due
+          </Button>
+        </View>
+      </Modal>
+    </>
+  );
+};
 
 const OrdersTab = ({ currentStore, id, theme, loading, refetchStoreDetails }) => {
   const [orderProducts, setOrderProducts] = useState([]);
@@ -857,7 +1079,6 @@ const StoreDetailsScreen = () => {
     handleAddStoreDue,
     showMessage
   } = useContext(ServicesProvider);
-  console.log(currentStore)
   const [refreshing, setRefreshing] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
   const [tabIndex, setTabIndex] = useState(0);
