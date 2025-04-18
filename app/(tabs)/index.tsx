@@ -1,9 +1,114 @@
+import { useContext } from 'react'
 import { View, StyleSheet, ScrollView, Image } from "react-native";
 import { Appbar, Card, Text } from "react-native-paper";
 import { Link } from "expo-router";
 import { MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
+import { ServicesProvider } from '../../provider/Provider.jsx';
 
 const HomeScreen = () => {
+  const { user } = useContext(ServicesProvider);
+  
+  // Common cards that all roles can see
+  const commonCards = [
+    {
+      title: "Product Stock",
+      subtitle: "View available stock",
+      icon: "box-open",
+      color: "#FF5733",
+      href: "/product-stock"
+    }
+  ];
+
+  // Admin specific cards
+  const adminCards = [
+    {
+      title: "Manage Users",
+      subtitle: "Add, edit or remove users",
+      icon: "users-cog",
+      color: "#17A2B8",
+      href: "/manage-users"
+    },
+    {
+      title: "Officers List",
+      subtitle: "Manage company officers",
+      icon: "user-tie",
+      color: "#28A745",
+      href: "/officers-list"
+    },
+    {
+      title: "All Orders",
+      subtitle: "View & track all orders",
+      icon: "shopping-cart",
+      color: "#F4A600",
+      href: "/all-orders-list"
+    },
+    {
+      title: "All Stores",
+      subtitle: "Browse all company stores",
+      icon: "store-alt",
+      color: "#607D8B",
+      href: "/all-stores-list"
+    }
+  ];
+
+  // Officer specific cards
+  const officerCards = [
+    {
+      title: "Add Store",
+      subtitle: "Register new store location",
+      icon: "store",
+      color: "#9C27B0",
+      href: "/add-store"
+    },
+    {
+      title: "My Stores",
+      subtitle: "Manage your stores",
+      icon: "store",
+      color: "#9C27B0",
+      href: "/my-stores"
+    },
+    {
+      title: "My Orders",
+      subtitle: "View your personal orders",
+      icon: "clipboard-list",
+      color: "#2196F3",
+      href: "/my-orders"
+    }
+  ];
+
+  // Stock-manager specific cards
+  const stockManagerCards = [
+    {
+      title: "Add Product",
+      subtitle: "Add new product to inventory",
+      icon: "plus-square",
+      color: "#4CAF50",
+      href: "/add-product"
+    },
+    {
+      title: "All Orders",
+      subtitle: "View & track all orders",
+      icon: "shopping-cart",
+      color: "#F4A600",
+      href: "/all-orders-list"
+    }
+  ];
+
+  // Combine cards based on user role
+  const getCardsForRole = () => {
+    let cards = [...commonCards];
+    
+    if (user?.role === 'admin') {
+      cards = [...cards, ...adminCards];
+    } else if (user?.role === 'officer') {
+      cards = [...cards, ...officerCards];
+    } else if (user?.role === 'stock-manager') {
+      cards = [...cards, ...stockManagerCards];
+    }
+    
+    return cards;
+  };
+
   return (
     <View style={styles.safeContainer}>
       <Appbar.Header style={styles.appbar}>
@@ -13,124 +118,27 @@ const HomeScreen = () => {
           resizeMode="contain"
         />
         <Appbar.Content 
-          title="আদর্শ এগ্রোভেট লিমিটেড" 
+          title="Adarsha AgroVet Limited" 
           titleStyle={styles.appbarTitle} 
           style={styles.appbarContent}
         />
       </Appbar.Header>
 
       <ScrollView contentContainerStyle={styles.container}>
-        {/* Product Stock */}
-        <Link href="/product-stock" asChild>
-          <Card style={styles.card}>
-            <View style={styles.cardContent}>
-              <FontAwesome5 name="box-open" size={24} color="#FF5733" />
-              <View style={styles.textContainer}>
-                <Text style={styles.cardTitle}>Product Stock</Text>
-                <Text style={styles.cardSubtitle}>View available stock</Text>
+        {getCardsForRole().map((card, index) => (
+          <Link href={card.href} asChild key={index}>
+            <Card style={styles.card}>
+              <View style={styles.cardContent}>
+                <FontAwesome5 name={card.icon} size={24} color={card.color} />
+                <View style={styles.textContainer}>
+                  <Text style={styles.cardTitle}>{card.title}</Text>
+                  <Text style={styles.cardSubtitle}>{card.subtitle}</Text>
+                </View>
+                <MaterialIcons name="arrow-forward-ios" size={18} color="#888" />
               </View>
-              <MaterialIcons name="arrow-forward-ios" size={18} color="#888" />
-            </View>
-          </Card>
-        </Link>
-
-        {/* Add Product */}
-        <Link href="/add-product" asChild>
-          <Card style={styles.card}>
-            <View style={styles.cardContent}>
-              <FontAwesome5 name="plus-square" size={24} color="#4CAF50" />
-              <View style={styles.textContainer}>
-                <Text style={styles.cardTitle}>Add Product</Text>
-                <Text style={styles.cardSubtitle}>Add new product to inventory</Text>
-              </View>
-              <MaterialIcons name="arrow-forward-ios" size={18} color="#888" />
-            </View>
-          </Card>
-        </Link>
-
-        {/* Add Store - New Card */}
-        <Link href="/add-store" asChild>
-          <Card style={styles.card}>
-            <View style={styles.cardContent}>
-              <FontAwesome5 name="store" size={24} color="#9C27B0" />
-              <View style={styles.textContainer}>
-                <Text style={styles.cardTitle}>Add Store</Text>
-                <Text style={styles.cardSubtitle}>Register new store location</Text>
-              </View>
-              <MaterialIcons name="arrow-forward-ios" size={18} color="#888" />
-            </View>
-          </Card>
-        </Link>
-
-        {/* Officers List */}
-        <Link href="/officers-list" asChild>
-          <Card style={styles.card}>
-            <View style={styles.cardContent}>
-              <FontAwesome5 name="user-tie" size={24} color="#28A745" />
-              <View style={styles.textContainer}>
-                <Text style={styles.cardTitle}>Officers List</Text>
-                <Text style={styles.cardSubtitle}>Manage company officers</Text>
-              </View>
-              <MaterialIcons name="arrow-forward-ios" size={18} color="#888" />
-            </View>
-          </Card>
-        </Link>
-
-        {/* Orders */}
-        <Link href="/all-orders-list" asChild>
-          <Card style={styles.card}>
-            <View style={styles.cardContent}>
-              <FontAwesome5 name="shopping-cart" size={24} color="#F4A600" />
-              <View style={styles.textContainer}>
-                <Text style={styles.cardTitle}>All Orders</Text>
-                <Text style={styles.cardSubtitle}>View & track orders</Text>
-              </View>
-              <MaterialIcons name="arrow-forward-ios" size={18} color="#888" />
-            </View>
-          </Card>
-        </Link>
-
-        {/* Stores */}
-        <Link href="/my-stores" asChild>
-          <Card style={styles.card}>
-            <View style={styles.cardContent}>
-              <FontAwesome5 name="store" size={24} color="#9C27B0" />
-              <View style={styles.textContainer}>
-                <Text style={styles.cardTitle}>My Stores</Text>
-                <Text style={styles.cardSubtitle}>Manage your stores</Text>
-              </View>
-              <MaterialIcons name="arrow-forward-ios" size={18} color="#888" />
-            </View>
-          </Card>
-        </Link>
-
-        {/* My Orders */}
-        <Link href="/my-orders" asChild>
-          <Card style={styles.card}>
-            <View style={styles.cardContent}>
-              <FontAwesome5 name="clipboard-list" size={24} color="#2196F3" />
-              <View style={styles.textContainer}>
-                <Text style={styles.cardTitle}>My Orders</Text>
-                <Text style={styles.cardSubtitle}>View your personal orders</Text>
-              </View>
-              <MaterialIcons name="arrow-forward-ios" size={18} color="#888" />
-            </View>
-          </Card>
-        </Link>
-
-        {/* All Stores */}
-        <Link href="/all-stores-list" asChild>
-          <Card style={styles.card}>
-            <View style={styles.cardContent}>
-              <FontAwesome5 name="store-alt" size={24} color="#607D8B" />
-              <View style={styles.textContainer}>
-                <Text style={styles.cardTitle}>All Stores</Text>
-                <Text style={styles.cardSubtitle}>Browse all company stores</Text>
-              </View>
-              <MaterialIcons name="arrow-forward-ios" size={18} color="#888" />
-            </View>
-          </Card>
-        </Link>
+            </Card>
+          </Link>
+        ))}
       </ScrollView>
     </View>
   );

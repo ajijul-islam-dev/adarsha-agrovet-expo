@@ -5,7 +5,7 @@ import { useLocalSearchParams, router, Link } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { ServicesProvider} from '../../provider/Provider.jsx';
+import { ServicesProvider } from '../../provider/Provider.jsx';
 
 const Tab = createMaterialTopTabNavigator();
 
@@ -20,66 +20,20 @@ const formatDate = (dateString) => {
   });
 };
 
-const formatCurrency = (amount) => {
-  return `৳${amount?.toLocaleString() || '0'}`;
+const formatDateTime = (dateString) => {
+  if (!dateString) return 'N/A';
+  const date = new Date(dateString);
+  return date.toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
 };
 
-// Static data for the officer
-const staticOfficerData = {
-  officerId: "OF-12345",
-  name: "John Doe",
-  designation: "Field Officer",
-  contactNumber: "+8801712345678",
-  email: "john.doe@company.com",
-  joiningDate: "2022-05-15",
-  area: "Dhaka North",
-  totalStoresAssigned: 24,
-  activeStores: 18,
-  inactiveStores: 6,
-  performanceRating: 4.5,
-  lastMonthCollections: 1250000,
-  thisMonthCollections: 980000,
-  lastMonthOrders: 45,
-  thisMonthOrders: 32,
-  activityHistory: [
-    {
-      id: 1,
-      date: "2023-10-15T09:30:00",
-      type: "store_visit",
-      storeName: "ABC Traders",
-      details: "Regular follow-up visit"
-    },
-    {
-      id: 2,
-      date: "2023-10-14T14:15:00",
-      type: "payment_collection",
-      amount: 45000,
-      storeName: "XYZ Store"
-    },
-    {
-      id: 3,
-      date: "2023-10-12T11:00:00",
-      type: "new_order",
-      orderId: "ORD-78945",
-      amount: 125000,
-      storeName: "Best Buy"
-    }
-  ],
-  upcomingTasks: [
-    {
-      id: 1,
-      dueDate: "2023-10-18",
-      storeName: "City Mart",
-      taskType: "payment_collection",
-      amount: 65000
-    },
-    {
-      id: 2,
-      dueDate: "2023-10-20",
-      storeName: "Fresh Grocery",
-      taskType: "store_visit"
-    }
-  ]
+const formatCurrency = (amount) => {
+  return `৳${amount?.toLocaleString('en-IN') || '0'}`;
 };
 
 // Tab Components
@@ -96,89 +50,51 @@ const OverviewTab = ({ officerData, theme, onRefresh, refreshing }) => {
     >
       <Card style={[styles.summaryCard, { backgroundColor: theme.colors.surface }]}>
         <Card.Title 
-          title="Performance Summary" 
+          title="Financial Summary" 
           titleVariant="titleMedium" 
           titleStyle={{ color: theme.colors.primary }}
-          left={() => <MaterialCommunityIcons name="chart-line" size={24} color={theme.colors.primary} />}
+          left={() => <MaterialCommunityIcons name="finance" size={24} color={theme.colors.primary} />}
         />
         <Card.Content>
           <View style={styles.summaryRow}>
             <View style={styles.summaryItem}>
               <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>
-                Stores Assigned
+                Total Stores
               </Text>
               <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]}>
-                {officerData.totalStoresAssigned}
+                {officerData?.financials?.storeCount || 0}
               </Text>
             </View>
             <View style={styles.summaryItem}>
               <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>
-                Active Stores
+                Total Orders
               </Text>
               <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]}>
-                {officerData.activeStores}
+                {officerData?.financials?.orderCount || 0}
               </Text>
             </View>
           </View>
           <View style={styles.summaryRow}>
             <View style={styles.summaryItem}>
               <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>
-                Performance Rating
+                Total Payments
               </Text>
               <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]}>
-                {officerData.performanceRating}/5
+                {formatCurrency(officerData?.financials?.totalPayments || 0)}
               </Text>
             </View>
             <View style={[styles.summaryItem, styles.highlightItem]}>
               <Text style={[styles.summaryLabel, { color: theme.colors.onPrimaryContainer }]}>
-                This Month Collection
+                Net Dues
               </Text>
-              <Text style={[styles.summaryValue, { color: theme.colors.onPrimaryContainer, fontWeight: 'bold' }]}>
-                {formatCurrency(officerData.thisMonthCollections)}
+              <Text style={[styles.summaryValue, { 
+                color: officerData?.financials?.netDues > 0 ? theme.colors.error : theme.colors.primary,
+                fontWeight: 'bold' 
+              }]}>
+                {formatCurrency(officerData?.financials?.netDues || 0)}
               </Text>
             </View>
           </View>
-        </Card.Content>
-      </Card>
-
-      <Card style={[styles.quickActionsCard, { backgroundColor: theme.colors.surface }]}>
-        <Card.Title 
-          title="Quick Actions" 
-          titleVariant="titleMedium" 
-          titleStyle={{ color: theme.colors.primary }}
-          left={() => <MaterialCommunityIcons name="lightning-bolt" size={24} color={theme.colors.primary} />}
-        />
-        <Card.Content style={styles.quickActionsContent}>
-          <Button
-            mode="contained"
-            icon="cash-plus"
-            style={styles.quickActionButton}
-            contentStyle={styles.buttonContent}
-            labelStyle={styles.buttonLabel}
-            onPress={() => console.log("Record Collection")}
-          >
-            Record Collection
-          </Button>
-          <Button
-            mode="contained"
-            icon="store-plus"
-            style={styles.quickActionButton}
-            contentStyle={styles.buttonContent}
-            labelStyle={styles.buttonLabel}
-            onPress={() => console.log("Assign Store")}
-          >
-            Assign Store
-          </Button>
-          <Button
-            mode="contained"
-            icon="calendar-clock"
-            style={styles.quickActionButton}
-            contentStyle={styles.buttonContent}
-            labelStyle={styles.buttonLabel}
-            onPress={() => console.log("Schedule Visit")}
-          >
-            Schedule Visit
-          </Button>
         </Card.Content>
       </Card>
 
@@ -192,46 +108,13 @@ const OverviewTab = ({ officerData, theme, onRefresh, refreshing }) => {
         <Card.Content>
           <View style={styles.infoRow}>
             <MaterialCommunityIcons
-              name="identifier"
-              size={20}
-              color={theme.colors.primary}
-              style={styles.infoIcon}
-            />
-            <Text style={[styles.infoText, { color: theme.colors.onSurface }]}>
-              ID: {officerData.officerId}
-            </Text>
-          </View>
-          <View style={styles.infoRow}>
-            <MaterialCommunityIcons
               name="account"
               size={20}
               color={theme.colors.primary}
               style={styles.infoIcon}
             />
             <Text style={[styles.infoText, { color: theme.colors.onSurface }]}>
-              {officerData.name}
-            </Text>
-          </View>
-          <View style={styles.infoRow}>
-            <MaterialCommunityIcons
-              name="badge-account"
-              size={20}
-              color={theme.colors.primary}
-              style={styles.infoIcon}
-            />
-            <Text style={[styles.infoText, { color: theme.colors.onSurface }]}>
-              {officerData.designation}
-            </Text>
-          </View>
-          <View style={styles.infoRow}>
-            <MaterialCommunityIcons
-              name="phone"
-              size={20}
-              color={theme.colors.primary}
-              style={styles.infoIcon}
-            />
-            <Text style={[styles.infoText, { color: theme.colors.onSurface }]}>
-              {officerData.contactNumber}
+              {officerData?.name || 'N/A'}
             </Text>
           </View>
           <View style={styles.infoRow}>
@@ -242,7 +125,40 @@ const OverviewTab = ({ officerData, theme, onRefresh, refreshing }) => {
               style={styles.infoIcon}
             />
             <Text style={[styles.infoText, { color: theme.colors.onSurface }]}>
-              {officerData.email}
+              {officerData?.email || 'N/A'}
+            </Text>
+          </View>
+          <View style={styles.infoRow}>
+            <MaterialCommunityIcons
+              name="phone"
+              size={20}
+              color={theme.colors.primary}
+              style={styles.infoIcon}
+            />
+            <Text style={[styles.infoText, { color: theme.colors.onSurface }]}>
+              {officerData?.phone || 'N/A'}
+            </Text>
+          </View>
+          <View style={styles.infoRow}>
+            <MaterialCommunityIcons
+              name="map-marker"
+              size={20}
+              color={theme.colors.primary}
+              style={styles.infoIcon}
+            />
+            <Text style={[styles.infoText, { color: theme.colors.onSurface }]}>
+              Area: {officerData?.area || 'N/A'}
+            </Text>
+          </View>
+          <View style={styles.infoRow}>
+            <MaterialCommunityIcons
+              name="badge-account"
+              size={20}
+              color={theme.colors.primary}
+              style={styles.infoIcon}
+            />
+            <Text style={[styles.infoText, { color: theme.colors.onSurface }]}>
+              Role: {officerData?.role || 'N/A'}
             </Text>
           </View>
           <View style={styles.infoRow}>
@@ -253,18 +169,7 @@ const OverviewTab = ({ officerData, theme, onRefresh, refreshing }) => {
               style={styles.infoIcon}
             />
             <Text style={[styles.infoText, { color: theme.colors.onSurface }]}>
-              Joined: {formatDate(officerData.joiningDate)}
-            </Text>
-          </View>
-          <View style={styles.infoRow}>
-            <MaterialCommunityIcons
-              name="map-marker-radius"
-              size={20}
-              color={theme.colors.primary}
-              style={styles.infoIcon}
-            />
-            <Text style={[styles.infoText, { color: theme.colors.onSurface }]}>
-              Area: {officerData.area}
+              Joined: {formatDate(officerData?.createdAt)}
             </Text>
           </View>
         </Card.Content>
@@ -273,55 +178,92 @@ const OverviewTab = ({ officerData, theme, onRefresh, refreshing }) => {
   );
 };
 
-const ActivityTab = ({ officerData, theme }) => {
+const OrdersTab = ({ officerData, theme, loading }) => {
+  if (loading) {
+    return (
+      <View style={styles.loadingTabContainer}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={{ marginTop: 16, color: theme.colors.onSurface }}>Loading orders...</Text>
+      </View>
+    );
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.tabContentContainer}>
       <Card style={[styles.dataCard, { backgroundColor: theme.colors.surface }]}>
         <Card.Title
-          title={`Recent Activities (${officerData.activityHistory.length})`}
+          title={`Orders (${officerData?.histories?.orders?.length || 0})`}
           titleVariant="titleMedium"
           titleStyle={{ color: theme.colors.primary }}
-          left={() => <MaterialCommunityIcons name="history" size={24} color={theme.colors.primary} />}
+          left={() => <MaterialCommunityIcons name="cart" size={24} color={theme.colors.primary} />}
         />
         <Card.Content>
-          {officerData.activityHistory.length > 0 ? (
+          {officerData?.histories?.orders?.length > 0 ? (
             <DataTable>
               <DataTable.Header>
                 <DataTable.Title>Date</DataTable.Title>
-                <DataTable.Title>Activity</DataTable.Title>
-                <DataTable.Title numeric>Details</DataTable.Title>
+                <DataTable.Title>Store</DataTable.Title>
+                <DataTable.Title>Status</DataTable.Title>
+                <DataTable.Title numeric>Amount</DataTable.Title>
               </DataTable.Header>
-              {officerData.activityHistory.map((activity) => (
-                <DataTable.Row key={activity.id}>
-                  <DataTable.Cell>
-                    {formatDate(activity.date)}
-                  </DataTable.Cell>
-                  <DataTable.Cell>
-                    <Text style={{ textTransform: 'capitalize' }}>
-                      {activity.type.replace('_', ' ')}
-                    </Text>
-                  </DataTable.Cell>
-                  <DataTable.Cell numeric>
-                    {activity.type === 'payment_collection' ? (
-                      formatCurrency(activity.amount)
-                    ) : activity.type === 'new_order' ? (
-                      `Order #${activity.orderId.slice(-5)}`
-                    ) : (
-                      activity.storeName
-                    )}
-                  </DataTable.Cell>
-                </DataTable.Row>
+              {officerData.histories.orders.map((order) => (
+                <Link href={`/all-orders-list/${order._id}`} asChild key={order._id}>
+                  <TouchableOpacity>
+                    <DataTable.Row>
+                      <DataTable.Cell>
+                        {formatDateTime(order.createdAt)}
+                      </DataTable.Cell>
+                      <DataTable.Cell>
+                        {order.store?.storeName || 'N/A'}
+                      </DataTable.Cell>
+                      <DataTable.Cell>
+                        <View style={[
+                          styles.statusBadge,
+                          {
+                            backgroundColor: order.status === 'completed'
+                              ? theme.colors.secondaryContainer
+                              : theme.colors.tertiaryContainer
+                          }
+                        ]}>
+                          <Text style={{
+                            color: order.status === 'completed'
+                              ? theme.colors.onSecondaryContainer
+                              : theme.colors.onTertiaryContainer,
+                            textTransform: 'capitalize'
+                          }}>
+                            {order.status}
+                          </Text>
+                        </View>
+                      </DataTable.Cell>
+                      <DataTable.Cell numeric>
+                        {formatCurrency(order.orderTotal)}
+                      </DataTable.Cell>
+                    </DataTable.Row>
+                  </TouchableOpacity>
+                </Link>
               ))}
+              <DataTable.Row style={{ backgroundColor: theme.colors.surfaceVariant }}>
+                <DataTable.Cell>
+                  <Text style={{ fontWeight: 'bold' }}>Total</Text>
+                </DataTable.Cell>
+                <DataTable.Cell></DataTable.Cell>
+                <DataTable.Cell></DataTable.Cell>
+                <DataTable.Cell numeric>
+                  <Text style={{ fontWeight: 'bold' }}>
+                    {formatCurrency(officerData?.financials?.totalOrdersValue || 0)}
+                  </Text>
+                </DataTable.Cell>
+              </DataTable.Row>
             </DataTable>
           ) : (
             <View style={styles.emptyDataContainer}>
               <MaterialCommunityIcons
-                name="history-off"
+                name="cart-remove"
                 size={40}
                 color={theme.colors.backdrop}
               />
               <Text style={[styles.emptyDataText, { color: theme.colors.onSurface }]}>
-                No recent activities
+                No orders recorded
               </Text>
             </View>
           )}
@@ -331,178 +273,234 @@ const ActivityTab = ({ officerData, theme }) => {
   );
 };
 
-const TasksTab = ({ officerData, theme }) => {
-  const [showTaskModal, setShowTaskModal] = useState(false);
-  const [taskData, setTaskData] = useState({
-    storeName: '',
-    taskType: 'store_visit',
-    dueDate: new Date(),
-    amount: '',
-    notes: ''
-  });
-  const [showDatePicker, setShowDatePicker] = useState(false);
+const PaymentsTab = ({ officerData, theme, loading }) => {
+  if (loading) {
+    return (
+      <View style={styles.loadingTabContainer}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={{ marginTop: 16, color: theme.colors.onSurface }}>Loading payments...</Text>
+      </View>
+    );
+  }
 
   return (
     <ScrollView contentContainerStyle={styles.tabContentContainer}>
       <Card style={[styles.dataCard, { backgroundColor: theme.colors.surface }]}>
         <Card.Title
-          title={`Upcoming Tasks (${officerData.upcomingTasks.length})`}
+          title={`Payments (${officerData?.histories?.payments?.length || 0})`}
           titleVariant="titleMedium"
           titleStyle={{ color: theme.colors.primary }}
-          left={() => <MaterialCommunityIcons name="clipboard-list" size={24} color={theme.colors.primary} />}
-          right={() => (
-            <Button
-              mode="contained-tonal"
-              icon="plus"
-              onPress={() => setShowTaskModal(true)}
-              compact
-              style={styles.addButton}
-            >
-              Add
-            </Button>
-          )}
+          left={() => <MaterialCommunityIcons name="cash-multiple" size={24} color={theme.colors.primary} />}
         />
         <Card.Content>
-          {officerData.upcomingTasks.length > 0 ? (
+          {officerData?.histories?.payments?.length > 0 ? (
             <DataTable>
               <DataTable.Header>
-                <DataTable.Title>Due Date</DataTable.Title>
+                <DataTable.Title>Date</DataTable.Title>
                 <DataTable.Title>Store</DataTable.Title>
-                <DataTable.Title>Task</DataTable.Title>
+                <DataTable.Title>Method</DataTable.Title>
                 <DataTable.Title numeric>Amount</DataTable.Title>
               </DataTable.Header>
-              {officerData.upcomingTasks.map((task) => (
-                <DataTable.Row key={task.id}>
+              {officerData.histories.payments.map((payment) => (
+                <DataTable.Row key={payment._id}>
                   <DataTable.Cell>
-                    {formatDate(task.dueDate)}
+                    {formatDateTime(payment.date || payment.createdAt)}
                   </DataTable.Cell>
                   <DataTable.Cell>
-                    {task.storeName}
+                    {payment.store?.storeName || 'N/A'}
                   </DataTable.Cell>
                   <DataTable.Cell>
-                    <Text style={{ textTransform: 'capitalize' }}>
-                      {task.taskType.replace('_', ' ')}
-                    </Text>
+                    {payment.paymentMethod || 'cash'}
                   </DataTable.Cell>
                   <DataTable.Cell numeric>
-                    {task.amount ? formatCurrency(task.amount) : 'N/A'}
+                    {formatCurrency(payment.amount)}
                   </DataTable.Cell>
                 </DataTable.Row>
+              ))}
+              <DataTable.Row style={{ backgroundColor: theme.colors.surfaceVariant }}>
+                <DataTable.Cell>
+                  <Text style={{ fontWeight: 'bold' }}>Total</Text>
+                </DataTable.Cell>
+                <DataTable.Cell></DataTable.Cell>
+                <DataTable.Cell></DataTable.Cell>
+                <DataTable.Cell numeric>
+                  <Text style={{ fontWeight: 'bold' }}>
+                    {formatCurrency(officerData?.financials?.totalPayments || 0)}
+                  </Text>
+                </DataTable.Cell>
+              </DataTable.Row>
+            </DataTable>
+          ) : (
+            <View style={styles.emptyDataContainer}>
+              <MaterialCommunityIcons
+                name="cash-remove"
+                size={40}
+                color={theme.colors.backdrop}
+              />
+              <Text style={[styles.emptyDataText, { color: theme.colors.onSurface }]}>
+                No payments recorded
+              </Text>
+            </View>
+          )}
+        </Card.Content>
+      </Card>
+    </ScrollView>
+  );
+};
+
+const DuesTab = ({ officerData, theme, loading }) => {
+  if (loading) {
+    return (
+      <View style={styles.loadingTabContainer}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={{ marginTop: 16, color: theme.colors.onSurface }}>Loading dues...</Text>
+      </View>
+    );
+  }
+
+  const renderDueItem = (due) => {
+    if (due.type === 'by_order') {
+      return (
+        <Link href={`/all-orders-list/${due.orderId}`} asChild key={`order-due-${due.orderId}`}>
+          <TouchableOpacity>
+            <DataTable.Row>
+              <DataTable.Cell>
+                {formatDateTime(due.createdAt)}
+              </DataTable.Cell>
+              <DataTable.Cell>
+                Order #{due.orderId?.slice(-6) || 'N/A'}
+              </DataTable.Cell>
+              <DataTable.Cell numeric>
+                {formatCurrency(due.amount)}
+              </DataTable.Cell>
+            </DataTable.Row>
+          </TouchableOpacity>
+        </Link>
+      );
+    }
+    
+    return (
+      <DataTable.Row key={`manual-due-${due._id || due.date}`}>
+        <DataTable.Cell>
+          {formatDate(due.date)}
+        </DataTable.Cell>
+        <DataTable.Cell>
+          {due.description || 'Manual Due'}
+        </DataTable.Cell>
+        <DataTable.Cell numeric>
+          {formatCurrency(due.amount)}
+        </DataTable.Cell>
+      </DataTable.Row>
+    );
+  };
+
+  return (
+    <ScrollView contentContainerStyle={styles.tabContentContainer}>
+      <Card style={[styles.dataCard, { backgroundColor: theme.colors.surface }]}>
+        <Card.Title
+          title={`Dues (${officerData?.histories?.combinedDues?.length || 0})`}
+          titleVariant="titleMedium"
+          titleStyle={{ color: theme.colors.primary }}
+          left={() => <MaterialCommunityIcons name="receipt" size={24} color={theme.colors.primary} />}
+        />
+        <Card.Content>
+          {officerData?.histories?.combinedDues?.length > 0 ? (
+            <DataTable>
+              <DataTable.Header>
+                <DataTable.Title>Date</DataTable.Title>
+                <DataTable.Title>Description</DataTable.Title>
+                <DataTable.Title numeric>Amount</DataTable.Title>
+              </DataTable.Header>
+              {officerData.histories.combinedDues.map(renderDueItem)}
+              <DataTable.Row style={{ backgroundColor: theme.colors.surfaceVariant }}>
+                <DataTable.Cell>
+                  <Text style={{ fontWeight: 'bold' }}>Total</Text>
+                </DataTable.Cell>
+                <DataTable.Cell></DataTable.Cell>
+                <DataTable.Cell numeric>
+                  <Text style={{ fontWeight: 'bold' }}>
+                    {formatCurrency(officerData?.financials?.totalOrdersValue + officerData?.financials?.totalManualDues || 0)}
+                  </Text>
+                </DataTable.Cell>
+              </DataTable.Row>
+            </DataTable>
+          ) : (
+            <View style={styles.emptyDataContainer}>
+              <MaterialCommunityIcons
+                name="receipt-text-remove"
+                size={40}
+                color={theme.colors.backdrop}
+              />
+              <Text style={[styles.emptyDataText, { color: theme.colors.onSurface }]}>
+                No dues recorded
+              </Text>
+            </View>
+          )}
+        </Card.Content>
+      </Card>
+    </ScrollView>
+  );
+};
+
+const StoresTab = ({ officerData, theme, loading }) => {
+  if (loading) {
+    return (
+      <View style={styles.loadingTabContainer}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={{ marginTop: 16, color: theme.colors.onSurface }}>Loading stores...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView contentContainerStyle={styles.tabContentContainer}>
+      <Card style={[styles.dataCard, { backgroundColor: theme.colors.surface }]}>
+        <Card.Title
+          title={`Stores (${officerData?.stores?.length || 0})`}
+          titleVariant="titleMedium"
+          titleStyle={{ color: theme.colors.primary }}
+          left={() => <MaterialCommunityIcons name="store" size={24} color={theme.colors.primary} />}
+        />
+        <Card.Content>
+          {officerData?.stores?.length > 0 ? (
+            <DataTable>
+              <DataTable.Header>
+                <DataTable.Title>Store Name</DataTable.Title>
+                <DataTable.Title>Proprietor</DataTable.Title>
+                <DataTable.Title numeric>Balance</DataTable.Title>
+              </DataTable.Header>
+              {officerData.stores.map((store) => (
+                <Link href={`/stores/${store._id}`} asChild key={store._id}>
+                  <TouchableOpacity>
+                    <DataTable.Row>
+                      <DataTable.Cell>
+                        {store.storeName}
+                      </DataTable.Cell>
+                      <DataTable.Cell>
+                        {store.proprietorName}
+                      </DataTable.Cell>
+                      <DataTable.Cell numeric>
+                        {formatCurrency(store.totalFinalDues || 0)}
+                      </DataTable.Cell>
+                    </DataTable.Row>
+                  </TouchableOpacity>
+                </Link>
               ))}
             </DataTable>
           ) : (
             <View style={styles.emptyDataContainer}>
               <MaterialCommunityIcons
-                name="clipboard-list-outline"
+                name="store-remove"
                 size={40}
                 color={theme.colors.backdrop}
               />
               <Text style={[styles.emptyDataText, { color: theme.colors.onSurface }]}>
-                No upcoming tasks
+                No stores assigned
               </Text>
-              <Button
-                mode="contained"
-                icon="plus"
-                onPress={() => setShowTaskModal(true)}
-                style={{ marginTop: 16 }}
-                contentStyle={styles.buttonContent}
-              >
-                Add Task
-              </Button>
             </View>
           )}
         </Card.Content>
       </Card>
-
-      {/* Task Modal */}
-      <Portal>
-        <Modal 
-          visible={showTaskModal} 
-          onDismiss={() => setShowTaskModal(false)}
-          contentContainerStyle={[styles.modalContainer, { backgroundColor: theme.colors.background }]}
-        >
-          <Text style={[styles.modalTitle, { color: theme.colors.primary }]}>Add New Task</Text>
-          
-          <TextInput
-            label="Store Name"
-            value={taskData.storeName}
-            onChangeText={(text) => setTaskData({...taskData, storeName: text})}
-            style={styles.modalInput}
-            mode="outlined"
-          />
-
-          <TextInput
-            label="Task Type"
-            value={taskData.taskType}
-            onChangeText={(text) => setTaskData({...taskData, taskType: text})}
-            style={styles.modalInput}
-            mode="outlined"
-          />
-
-          {taskData.taskType === 'payment_collection' && (
-            <TextInput
-              label="Amount"
-              value={taskData.amount}
-              onChangeText={(text) => setTaskData({...taskData, amount: text.replace(/[^0-9.]/g, '')})}
-              inputMode="numeric"
-              style={styles.modalInput}
-              mode="outlined"
-            />
-          )}
-
-          <TextInput
-            label="Notes"
-            value={taskData.notes}
-            onChangeText={(text) => setTaskData({...taskData, notes: text})}
-            style={styles.modalInput}
-            mode="outlined"
-            multiline
-          />
-
-          <TouchableOpacity 
-            onPress={() => setShowDatePicker(true)}
-            style={[styles.datePickerButton, { borderColor: theme.colors.primary }]}
-          >
-            <Text style={{ color: theme.colors.onSurface }}>
-              Due Date: {taskData.dueDate.toLocaleDateString()}
-            </Text>
-          </TouchableOpacity>
-
-          {showDatePicker && (
-            <DateTimePicker
-              value={taskData.dueDate}
-              mode="date"
-              display="default"
-              onChange={(event, date) => {
-                setShowDatePicker(false);
-                if (date) {
-                  setTaskData({...taskData, dueDate: date});
-                }
-              }}
-            />
-          )}
-
-          <View style={styles.modalButtonContainer}>
-            <Button 
-              mode="outlined" 
-              onPress={() => setShowTaskModal(false)}
-              style={styles.modalButton}
-            >
-              Cancel
-            </Button>
-            <Button 
-              mode="contained" 
-              onPress={() => {
-                console.log("Task submitted:", taskData);
-                setShowTaskModal(false);
-              }}
-              style={styles.modalButton}
-            >
-              Add Task
-            </Button>
-          </View>
-        </Modal>
-      </Portal>
     </ScrollView>
   );
 };
@@ -511,36 +509,94 @@ const TasksTab = ({ officerData, theme }) => {
 const OfficerDetailsScreen = () => {
   const theme = useTheme();
   const { id } = useLocalSearchParams();
+  const { 
+    currentOfficer, 
+    loading, 
+    handleGetOfficerById,
+    showMessage
+  } = useContext(ServicesProvider);
   const [refreshing, setRefreshing] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
   const [tabIndex, setTabIndex] = useState(0);
-  const tabNavRef = useRef(null);
+  
   const indicatorPosition = useRef(new Animated.Value(0)).current;
-  const [officerData, setOfficerData] = useState(staticOfficerData);
-  const {} = useContext(ServicesProvider)
-  const onRefresh = async () => {
+
+  const refetchOfficerDetails = async () => {
     setRefreshing(true);
-    // Simulate data refresh
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 1000);
+    await handleGetOfficerById(id);
+    setRefreshing(false);
+  };
+
+  useEffect(() => {
+    const loadData = async () => {
+      setInitialLoad(true);
+      await handleGetOfficerById(id);
+      setInitialLoad(false);
+    };
+    loadData();
+  }, [id]);
+
+  const onRefresh = async () => {
+    await refetchOfficerDetails();
   };
 
   const handleTabChange = (e) => {
     const index = e?.data?.state?.index ?? 0;
     setTabIndex(index);
     Animated.spring(indicatorPosition, {
-      toValue: index * (Dimensions.get('window').width / 3),
+      toValue: index * (Dimensions.get('window').width / 5),
       useNativeDriver: true,
     }).start();
   };
+
+  if (initialLoad || (loading && !refreshing && !currentOfficer)) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <Appbar.Header>
+          <Appbar.BackAction onPress={() => router.back()} />
+          <Appbar.Content title="Loading Officer..." />
+        </Appbar.Header>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={{ marginTop: 16, color: theme.colors.onSurface }}>Loading officer details...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (!currentOfficer && !loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <Appbar.Header>
+          <Appbar.BackAction onPress={() => router.back()} />
+          <Appbar.Content title="Officer Not Found" />
+        </Appbar.Header>
+        <View style={styles.loadingContainer}>
+          <MaterialCommunityIcons 
+            name="account-remove" 
+            size={40} 
+            color={theme.colors.error} 
+          />
+          <Text style={{ marginTop: 16, color: theme.colors.onSurface }}>Officer not found</Text>
+          <Button 
+            mode="contained" 
+            onPress={() => router.back()}
+            style={{ marginTop: 16 }}
+          >
+            Go Back
+          </Button>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Appbar.Header>
         <Appbar.BackAction onPress={() => router.back()} />
         <Appbar.Content 
-          title={officerData.name} 
-          subtitle={`${officerData.designation} | ${officerData.area}`}
+          title={currentOfficer?.name || 'Officer Details'} 
+          subtitle={`${currentOfficer?.role} | ${currentOfficer?.area}`}
         />
         <Appbar.Action 
           icon="refresh" 
@@ -551,7 +607,6 @@ const OfficerDetailsScreen = () => {
 
       <View style={styles.tabContainer}>
         <Tab.Navigator
-          ref={tabNavRef}
           initialRouteName="Overview"
           screenListeners={{
             state: handleTabChange,
@@ -594,7 +649,7 @@ const OfficerDetailsScreen = () => {
             name="Overview"
             children={() => (
               <OverviewTab 
-                officerData={officerData} 
+                officerData={currentOfficer} 
                 theme={theme} 
                 onRefresh={onRefresh} 
                 refreshing={refreshing} 
@@ -611,17 +666,18 @@ const OfficerDetailsScreen = () => {
             }}
           />
           <Tab.Screen
-            name="Activity"
+            name="Orders"
             children={() => (
-              <ActivityTab 
-                officerData={officerData} 
+              <OrdersTab 
+                officerData={currentOfficer} 
                 theme={theme}
+                loading={loading && !refreshing}
               />
             )}
             options={{
               tabBarIcon: ({ color }) => (
                 <MaterialCommunityIcons
-                  name="history"
+                  name="cart"
                   size={24}
                   color={color}
                 />
@@ -629,17 +685,56 @@ const OfficerDetailsScreen = () => {
             }}
           />
           <Tab.Screen
-            name="Tasks"
+            name="Payments"
             children={() => (
-              <TasksTab 
-                officerData={officerData} 
+              <PaymentsTab 
+                officerData={currentOfficer} 
                 theme={theme}
+                loading={loading && !refreshing}
               />
             )}
             options={{
               tabBarIcon: ({ color }) => (
                 <MaterialCommunityIcons
-                  name="clipboard-list"
+                  name="cash-multiple"
+                  size={24}
+                  color={color}
+                />
+              ),
+            }}
+          />
+          <Tab.Screen
+            name="Dues"
+            children={() => (
+              <DuesTab 
+                officerData={currentOfficer} 
+                theme={theme}
+                loading={loading && !refreshing}
+              />
+            )}
+            options={{
+              tabBarIcon: ({ color }) => (
+                <MaterialCommunityIcons
+                  name="receipt"
+                  size={24}
+                  color={color}
+                />
+              ),
+            }}
+          />
+          <Tab.Screen
+            name="Stores"
+            children={() => (
+              <StoresTab 
+                officerData={currentOfficer} 
+                theme={theme}
+                loading={loading && !refreshing}
+              />
+            )}
+            options={{
+              tabBarIcon: ({ color }) => (
+                <MaterialCommunityIcons
+                  name="store"
                   size={24}
                   color={color}
                 />
@@ -662,6 +757,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
+  loadingTabContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    marginTop: 100,
+  },
   tabContainer: {
     flex: 1,
   },
@@ -673,7 +775,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     height: 3,
     bottom: 0,
-    width: Dimensions.get('window').width / 3,
+    width: Dimensions.get('window').width / 5,
   },
   summaryCard: {
     borderRadius: 12,
@@ -701,27 +803,6 @@ const styles = StyleSheet.create({
   summaryValue: {
     fontSize: 16,
     fontWeight: '500',
-  },
-  quickActionsCard: {
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  quickActionsContent: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  quickActionButton: {
-    flex: 1,
-    minWidth: '30%',
-    height: 50,
-  },
-  buttonContent: {
-    height: 44,
-  },
-  buttonLabel: {
-    fontSize: 12,
   },
   infoCard: {
     borderRadius: 12,
@@ -752,38 +833,10 @@ const styles = StyleSheet.create({
     marginTop: 16,
     textAlign: 'center',
   },
-  addButton: {
-    marginRight: 8,
-  },
-  modalContainer: {
-    padding: 20,
-    margin: 20,
-    borderRadius: 8,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  modalInput: {
-    marginBottom: 16,
-  },
-  modalButtonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 16,
-  },
-  modalButton: {
-    flex: 1,
-    marginHorizontal: 8,
-  },
-  datePickerButton: {
-    padding: 12,
-    borderWidth: 1,
-    borderRadius: 4,
-    marginBottom: 16,
-    alignItems: 'center',
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
 });
 

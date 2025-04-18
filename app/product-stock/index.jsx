@@ -39,6 +39,7 @@ const ProductStockScreen = () => {
     handleUpdateProductStock,
     handleUpdateProduct,
     showMessage,
+    user
   } = useContext(ServicesProvider);
 
   useEffect(() => {

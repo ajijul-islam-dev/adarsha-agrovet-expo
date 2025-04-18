@@ -13,7 +13,7 @@ const SigninScreen = ({ navigation }) => {
 
   // ফর্ম যাচাই (Validation Schema)
   const SigninSchema = Yup.object().shape({
-    email: Yup.string().email("সঠিক ইমেইল দিন").required("ইমেইল আবশ্যক"),
+    phone: Yup.number().required("Phone Number আবশ্যক"),
     password: Yup.string()
       .min(6, "পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে")
       .required("পাসওয়ার্ড আবশ্যক"),
@@ -32,23 +32,23 @@ const SigninScreen = ({ navigation }) => {
       <Text style={styles.title}>লগইন করুন</Text>
 
       <Formik
-        initialValues={{ email: "", password: "" }}
+        initialValues={{ phone: "", password: "" }}
         validationSchema={SigninSchema}
         onSubmit={handleLogin}
       >
         {({ handleChange, handleBlur, handleSubmit, values, errors, touched }) => (
           <>
             <TextInput
-              label="ইমেইল"
+              label="Phone Number"
               mode="outlined"
-              keyboardType="email-address"
+              inputMode="numeric"
               style={styles.input}
-              onChangeText={handleChange("email")}
-              onBlur={handleBlur("email")}
-              value={values.email}
-              error={touched.email && errors.email}
+              onChangeText={handleChange("phone")}
+              onBlur={handleBlur("phone")}
+              value={values.phone}
+              error={touched.phone && errors.phone}
             />
-            {touched.email && errors.email && <Text style={styles.error}>{errors.email}</Text>}
+            {touched.phone && errors.phone && <Text style={styles.error}>{errors.phone}</Text>}
 
             <TextInput
               label="পাসওয়ার্ড"

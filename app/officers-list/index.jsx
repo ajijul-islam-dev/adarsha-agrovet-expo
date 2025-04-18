@@ -13,8 +13,6 @@ const OfficersListScreen = () => {
   const [filterVisible, setFilterVisible] = useState(false);
   const [filterOption, setFilterOption] = useState("all");
   const menuAnchorRef = useRef(null);
-
-console.log(officers)
   // Get unique areas from the officers data
   const uniqueAreas = ["all", ...new Set(officers.map(officer => officer.area))];
 

@@ -39,14 +39,9 @@ const orderSchema = new mongoose.Schema({
       max: 100
     }
   }],
-  paymentMethod: {
-    type: String,
-    enum: ['cash', 'credit'],
-    default: 'cash'
-  },
   status: {
     type: String,
-    enum: ['draft', 'pending', 'approved', 'rejected', 'fulfilled', 'confirmed'],
+    enum: ['draft', 'pending', 'approved', 'rejected', 'fulfilled'],
     default: 'draft'
   },
   statusHistory: [{
@@ -67,46 +62,70 @@ const orderSchema = new mongoose.Schema({
     required: true
   },
   submittedAt: Date,
-  submittedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   approvedAt: Date,
   approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   rejectedAt: Date,
   rejectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   rejectionReason: String,
   fulfilledAt: Date,
-  fulfilledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  confirmedAt: Date,
-  confirmedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+  fulfilledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 }, {
   timestamps: true
 });
 
-// Add pre-save hook to track status changes
+// Track previous status for stock management
 orderSchema.pre('save', function(next) {
   if (this.isModified('status')) {
-    this.statusHistory = this.statusHistory || [];
-    this.statusHistory.push({
-      status: this.status,
-      changedBy: this._updatedBy // Set this in your controllers
-    });
-    
-    // Update timestamps based on status changes
-    const now = new Date();
-    if (this.status === 'approved') {
-      this.approvedAt = now;
-    } else if (this.status === 'rejected') {
-      this.rejectedAt = now;
-    } else if (this.status === 'fulfilled') {
-      this.fulfilledAt = now;
-    } else if (this.status === 'confirmed') {
-      this.confirmedAt = now;
-    } else if (this.status === 'pending') {
-      this.submittedAt = now;
-    }
+    this._previousStatus = this._originalStatus || this.status;
+    this._originalStatus = this.status;
   }
   next();
 });
 
-const Order = mongoose.model('Order', orderSchema);
+// Handle stock changes based on order status
+orderSchema.pre('save', async function(next) {
+  if (this.isModified('status')) {
+    const session = this.$session();
+    
+    try {
+      // Add to status history
+      this.statusHistory = this.statusHistory || [];
+      this.statusHistory.push({
+        status: this.status,
+        changedBy: this._updatedBy,
+        changedAt: new Date(),
+        notes: this.status === 'rejected' ? this.rejectionReason : ''
+      });
 
+      // Handle stock changes
+      if (this.status === 'rejected' && this._previousStatus === 'pending') {
+        // Revert stock for rejected orders
+        for (const item of this.products) {
+          await mongoose.model('Product').updateOne(
+            { _id: item.product },
+            { $inc: { stock: item.quantity + (item.bonusQuantity || 0) } },
+            { session }
+          );
+        }
+      } else if (this.status === 'pending' && this._previousStatus === 'draft') {
+        // Reduce stock when order is submitted
+        for (const item of this.products) {
+          await mongoose.model('Product').updateOne(
+            { _id: item.product },
+            { $inc: { stock: - (item.quantity + (item.bonusQuantity || 0)) } },
+            { session }
+          );
+        }
+      }
+
+      next();
+    } catch (error) {
+      next(error);
+    }
+  } else {
+    next();
+  }
+});
+
+const Order = mongoose.model('Order', orderSchema);
 export default Order;

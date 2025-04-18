@@ -1082,7 +1082,7 @@ const StoreDetailsScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
   const [tabIndex, setTabIndex] = useState(0);
-  const tabNavRef = useRef(null);
+  console.log(currentStore)
   const indicatorPosition = useRef(new Animated.Value(0)).current;
 
   const refetchStoreDetails = async () => {
@@ -1171,7 +1171,7 @@ const StoreDetailsScreen = () => {
 
       <View style={styles.tabContainer}>
         <Tab.Navigator
-          ref={tabNavRef}
+          
           initialRouteName="Overview"
           screenListeners={{
             state: handleTabChange,

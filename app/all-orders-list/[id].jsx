@@ -1,4 +1,4 @@
-import React, { useState, useContext, useEffect,useRef } from 'react';
+import React, { useState, useContext, useEffect, useRef } from 'react';
 import { ScrollView, StyleSheet, View, Animated, Dimensions } from 'react-native';
 import {
   Appbar,
@@ -31,12 +31,13 @@ const OrderDetailsScreen = () => {
   const [confirmDialog, setConfirmDialog] = useState({ visible: false, type: null });
   const [initialLoad, setInitialLoad] = useState(true);
   const fadeAnim = useRef(new Animated.Value(0)).current;
-console.log(order)
+
   const {
     handleGetOrderById,
     handleApproveOrder,
     handleRejectOrder,
-    handleUpdateOrderStatus
+    handleUpdateOrderStatus,
+    user
   } = useContext(ServicesProvider);
 
   useEffect(() => {
@@ -46,7 +47,6 @@ console.log(order)
         const result = await handleGetOrderById(id);
         if (result.success) {
           setOrder(result.order);
-          // Fade in animation when data loads
           Animated.timing(fadeAnim, {
             toValue: 1,
             duration: 300,
@@ -92,10 +92,24 @@ console.log(order)
     }
   };
 
+  const handleFulfill = async () => {
+    try {
+      setLoading(true);
+      const result = await handleUpdateOrderStatus(id, 'fulfilled');
+      if (result.success) {
+        setOrder(prev => ({ ...prev, status: 'fulfilled' }));
+      }
+    } catch (error) {
+      console.error('Fulfillment failed:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleReject = async () => {
     try {
       setLoading(true);
-      const result = await handleRejectOrder(id, 'Rejected by admin');
+      const result = await handleUpdateOrderStatus(id, 'rejected');
       if (result.success) {
         setOrder(prev => ({ ...prev, status: 'rejected' }));
       }
@@ -108,14 +122,14 @@ console.log(order)
 
   if (initialLoad || (loading && !order)) {
     return (
-  <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <Appbar.Header>
           <Appbar.BackAction onPress={() => router.back()} />
-          <Appbar.Content title="Loading Store..." />
+          <Appbar.Content title="Loading Order..." />
         </Appbar.Header>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={{ marginTop: 16, color: theme.colors.onSurface }}>Loading store details...</Text>
+          <Text style={{ marginTop: 16, color: theme.colors.onSurface }}>Loading order details...</Text>
         </View>
       </View>
     );
@@ -147,12 +161,17 @@ console.log(order)
     );
   }
 
+  const showActionMenu = () => {
+    return (order.status === 'pending' && user?.role === 'admin') || 
+           (order.status === 'approved' && user?.role === 'stock-manager');
+  };
+  
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
       <Appbar.Header>
         <Appbar.BackAction onPress={() => router.back()} />
         <Appbar.Content title="Order Details" />
-        {order.status === 'pending' && (
+        {showActionMenu() && (
           <Menu
             visible={menuVisible}
             onDismiss={() => setMenuVisible(false)}
@@ -166,10 +185,15 @@ console.log(order)
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.statusContainer}>
           <ProgressBar
-            progress={order.status === 'pending' ? 0.5 : 1}
+            progress={
+              order.status === 'pending' ? 0.3 :
+              order.status === 'approved' ? 0.6 :
+              order.status === 'fulfilled' ? 1 : 0
+            }
             color={
               order.status === 'approved' ? theme.colors.primary :
               order.status === 'rejected' ? theme.colors.error :
+              order.status === 'fulfilled' ? theme.colors.secondary :
               theme.colors.onSurfaceVariant
             }
             style={styles.progressBar}
@@ -181,6 +205,7 @@ console.log(order)
                 backgroundColor:
                   order.status === 'approved' ? theme.colors.primaryContainer :
                   order.status === 'rejected' ? theme.colors.errorContainer :
+                  order.status === 'fulfilled' ? theme.colors.secondaryContainer :
                   theme.colors.surfaceVariant
               }
             ]}
@@ -188,6 +213,7 @@ console.log(order)
               color:
                 order.status === 'approved' ? theme.colors.primary :
                 order.status === 'rejected' ? theme.colors.error :
+                order.status === 'fulfilled' ? theme.colors.secondary :
                 theme.colors.onSurfaceVariant
             }}
           >
@@ -199,7 +225,7 @@ console.log(order)
         <Card style={styles.card}>
           <Card.Content>
             <View style={styles.row}>
-              <Text variant="titleMedium">Ordered by {order.createdBy.name}</Text>
+              <Text variant="titleMedium">{order.createdBy?.name || 'N/A'}</Text>
               <Text style={{ color: theme.colors.onSurfaceVariant }}>
                 {formatDate(order.submittedAt)} • {formatTime(order.submittedAt)}
               </Text>
@@ -215,7 +241,7 @@ console.log(order)
             </View>
             <View style={[styles.row, { marginTop: 8 }]}>
               <Text variant="titleSmall">Subtotal:</Text>
-              <Text variant="titleSmall">৳{order.orderFinalTotal?.finalAmount?.toLocaleString()}</Text>
+              <Text variant="titleSmall">৳{Number(order.orderTotal) - Number( order?.totalDiscount)}</Text>
             </View>
             <View style={[styles.row, { marginTop: 8 }]}>
               <MaterialIcons name="payment" size={20} color={theme.colors.primary} />
@@ -247,7 +273,6 @@ console.log(order)
                     </Text>
                   </View>
                   <Text variant="bodyLarge" style={styles.productTotal}>
-                    ৳{(product.finalAmount)?.toLocaleString()}
                   </Text>
                 </View>
                 {index < order.products.length - 1 && (
@@ -305,41 +330,66 @@ console.log(order)
 
       {/* FAB & Modals */}
       <Portal>
-        {order.status === 'pending' && (
+        {showActionMenu() && (
           <FAB
             icon="cog"
             label="Manage Order"
             onPress={() => setModalVisible(true)}
-            style={{...styles.fab,backgroundColor : theme.colors.primary}}
+            style={{...styles.fab, backgroundColor: theme.colors.primary}}
             color="white"
           />
         )}
 
         <Modal visible={modalVisible} onDismiss={() => setModalVisible(false)} contentContainerStyle={styles.modal}>
           <Text variant="titleMedium" style={{ marginBottom: 16 }}>Order Actions</Text>
-          <Button
-            icon="check"
-            mode="contained"
-            onPress={() => setConfirmDialog({ visible: true, type: 'approve' })}
-            style={{ marginBottom: 12 }}
-          >
-            Approve Order
-          </Button>
-          <Button
-            icon="close"
-            mode="outlined"
-            textColor={theme.colors.error}
-            onPress={() => setConfirmDialog({ visible: true, type: 'reject' })}
-          >
-            Reject Order
-          </Button>
+          
+          {user?.role === 'admin' && order.status === 'pending' ? (
+            <>
+              <Button
+                icon="check"
+                mode="contained"
+                onPress={() => setConfirmDialog({ visible: true, type: 'approve' })}
+                style={{ marginBottom: 12 }}
+              >
+                Approve Order
+              </Button>
+              <Button
+                icon="close"
+                mode="outlined"
+                textColor={theme.colors.error}
+                onPress={() => setConfirmDialog({ visible: true, type: 'reject' })}
+              >
+                Reject Order
+              </Button>
+            </>
+          ) : user?.role === 'stock-manager' && order.status === 'approved' ? (
+            <>
+              <Button
+                icon="check"
+                mode="contained"
+                onPress={() => setConfirmDialog({ visible: true, type: 'fulfill' })}
+                style={{ marginBottom: 12 }}
+              >
+                Fulfill Order
+              </Button>
+              <Button
+                icon="close"
+                mode="outlined"
+                textColor={theme.colors.error}
+                onPress={() => setConfirmDialog({ visible: true, type: 'reject' })}
+              >
+                Reject Order
+              </Button>
+            </>
+          ) : null}
         </Modal>
 
         <Dialog visible={confirmDialog.visible} onDismiss={() => setConfirmDialog({ visible: false, type: null })}>
           <Dialog.Title>Confirm Action</Dialog.Title>
           <Dialog.Content>
             <Paragraph>
-              Are you sure you want to {confirmDialog.type === 'approve' ? 'approve' : 'reject'} this order?
+              Are you sure you want to {confirmDialog.type === 'approve' ? 'approve' : 
+              confirmDialog.type === 'fulfill' ? 'fulfill' : 'reject'} this order?
             </Paragraph>
           </Dialog.Content>
           <Dialog.Actions>
@@ -348,6 +398,7 @@ console.log(order)
               onPress={async () => {
                 setConfirmDialog({ visible: false, type: null });
                 if (confirmDialog.type === 'approve') await handleApprove();
+                else if (confirmDialog.type === 'fulfill') await handleFulfill();
                 else await handleReject();
                 setModalVisible(false);
               }}

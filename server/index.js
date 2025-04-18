@@ -57,8 +57,9 @@ app.get('/', (req, res) => {
 // User Registration
 app.post('/register', async (req, res) => {
   try {
-    const { name, email, phone, area, password } = req.body;
+    const { name, email, phone, area, password, role } = req.body;
 
+    // Check if user already exists
     const existingUser = await User.findOne({ $or: [{ email }, { phone }] });
     if (existingUser) {
       return res.status(400).json({
@@ -71,6 +72,10 @@ app.post('/register', async (req, res) => {
       });
     }
 
+    // Check if this is the first user (make admin)
+    const userCount = await User.countDocuments();
+    const isFirstUser = userCount === 0;
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = new User({
@@ -79,8 +84,8 @@ app.post('/register', async (req, res) => {
       phone,
       area,
       password: hashedPassword,
-      role: "officer",
-      status: "pending" // Default status
+      role: isFirstUser ? 'admin' : role,
+      status: isFirstUser ? 'active' : 'pending' // First user is auto-activated
     });
 
     await user.save();
@@ -121,18 +126,22 @@ app.post('/register', async (req, res) => {
 });
 
 // User Login
+// User Login - Updated to handle phone login
 app.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+  const { email, phone, password } = req.body;
 
-  if (!email || !password) {
+  if (!password || (!email && !phone)) {
     return res.status(400).json({
       success: false,
-      message: 'Email and password are required'
+      message: 'Email/phone and password are required'
     });
   }
 
   try {
-    const user = await User.findOne({ email }).select('+password +status');
+    // Find user by email or phone
+    const user = await User.findOne({
+      $or: [{ email }, { phone }]
+    }).select('+password +status');
     
     if (!user) {
       return res.status(401).json({
@@ -161,10 +170,11 @@ app.post('/login', async (req, res) => {
     const tokenPayload = {
       id: user._id,
       email: user.email,
+      phone: user.phone,
       role: user.role,
       status: user.status,
       area: user.area,
-      phone: user.phone
+      name: user.name
     };
 
     const token = jwt.sign(
@@ -181,10 +191,10 @@ app.post('/login', async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
+        phone: user.phone,
         status: user.status,
         role: user.role,
-        area: user.area,
-        phone: user.phone
+        area: user.area
       }
     });
 
@@ -270,6 +280,98 @@ app.patch('/approve-user/:id', verifyToken, async (req, res) => {
   }
 });
 
+
+
+// Get all users (admin only)
+app.get('/users', verifyToken, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      message: 'Admin privileges required'
+    });
+  }
+
+  try {
+    const { search, role, status, area } = req.query;
+    
+    const query = {};
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { phone: { $regex: search, $options: 'i' } }
+      ];
+    }
+    if (role) query.role = role;
+    if (status) query.status = status;
+    if (area) query.area = area;
+
+    const users = await User.find(query)
+      .select('-password -__v')
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      count: users.length,
+      users
+    });
+  } catch (error) {
+    console.error('Get users error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch users',
+      error: error.message
+    });
+  }
+});
+
+// Update user status (admin only)
+app.patch('/users/:id/status', verifyToken, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      message: 'Admin privileges required'
+    });
+  }
+
+  try {
+    const { status } = req.body;
+    const validStatuses = ['pending', 'active', 'suspended', 'rejected'];
+
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid status. Valid values are: ${validStatuses.join(', ')}`
+      });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { status },
+      { new: true }
+    ).select('-password -__v');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `User status updated to ${status}`,
+      user
+    });
+  } catch (error) {
+    console.error('Update user status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update user status',
+      error: error.message
+    });
+  }
+});
 // _____________________Products___________________________
 // Product Routes
 
@@ -835,6 +937,7 @@ app.get('/officers', verifyToken, async (req, res) => {
 });
 
 app.get('/officers/:id', verifyToken, async (req, res) => {
+  
   try {
     // Validate ObjectId format if using MongoDB
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
@@ -1150,7 +1253,7 @@ app.get('/officers/:id', verifyToken, async (req, res) => {
     }
 
     const officer = result[0];
-
+    
     // Format response with proper defaults
     const formattedOfficer = {
       ...officer,
@@ -1175,7 +1278,7 @@ app.get('/officers/:id', verifyToken, async (req, res) => {
       tasks: officer.tasks || [],
       activities: officer.activities || []
     };
-
+   console.log(formattedOfficer)
     res.json({
       success: true,
       officer: formattedOfficer
@@ -2715,8 +2818,14 @@ app.get('/api/orders', verifyToken, async (req, res) => {
     
     let query = {};
     
-    // For non-admin users, only show their orders
-    if (req.user.role !== 'admin') {
+    // Role-based access control
+    if (req.user.role === 'admin') {
+      // Admins can see all orders
+    } else if (req.user.role === 'stock-manager') {
+      // Stock managers can see all approved orders
+      query.status = 'approved';
+    } else {
+      // Officers and others can only see their own orders
       query.createdBy = req.user.id;
     }
     
@@ -2725,7 +2834,7 @@ app.get('/api/orders', verifyToken, async (req, res) => {
       query.store = storeId;
     }
     
-    // Status filter
+    // Additional status filter (if provided)
     if (status) {
       query.status = status;
     }
@@ -2836,7 +2945,7 @@ app.get('/api/orders/:id', verifyToken, async (req, res) => {
     let query = { _id: id };
 
     // For non-admin users, only show their own orders
-    if (req.user.role !== 'admin') {
+    if (req.user.role !== 'admin' && req.user.role !== 'stock-manager') {
       query.createdBy = req.user.id;
     }
 
@@ -3251,7 +3360,7 @@ app.patch('/api/orders/:id/reject', verifyToken, async (req, res) => {
  */
 app.patch('/api/orders/:id/status', verifyToken, async (req, res) => {
   const { status, notes } = req.body;
-  const validStatuses = ['pending', 'approved', 'processing', 'shipped', 'completed', 'cancelled'];
+  const validStatuses = ['rejected', 'approved', 'fulfilled'];
 
   try {
     const order = await Order.findById(req.params.id);
@@ -3264,7 +3373,7 @@ app.patch('/api/orders/:id/status', verifyToken, async (req, res) => {
     }
 
     // Check permissions
-    if (req.user.role !== 'admin' && order.createdBy.toString() !== req.user.id) {
+    if (req.user.role !== 'admin' && req.user.role !== 'stock-manager') {
       return res.status(403).json({
         success: false,
         message: 'Unauthorized to update this order'
@@ -3287,10 +3396,33 @@ app.patch('/api/orders/:id/status', verifyToken, async (req, res) => {
       });
     }
 
+    // Role-specific validations
     if (status === 'approved' && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'Only admin can approve orders'
+      });
+    }
+
+    if (status === 'fulfilled' && req.user.role !== 'stock-manager') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only stock managers can fulfill orders'
+      });
+    }
+
+    // Status transition validations
+    if (status === 'approved' && order.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: 'Only pending orders can be approved'
+      });
+    }
+
+    if (status === 'fulfilled' && order.status !== 'approved') {
+      return res.status(400).json({
+        success: false,
+        message: 'Only approved orders can be fulfilled'
       });
     }
 
@@ -3299,20 +3431,21 @@ app.patch('/api/orders/:id/status', verifyToken, async (req, res) => {
     order.status = status;
     
     // Set timestamps
-    if (status === 'processing') order.processingAt = new Date();
-    if (status === 'shipped') order.shippedAt = new Date();
-    if (status === 'completed') order.completedAt = new Date();
-    if (status === 'cancelled') order.cancelledAt = new Date();
+    if (status === 'approved') order.approvedAt = new Date();
+    if (status === 'fulfilled') order.fulfilledAt = new Date();
+    if (status === 'rejected') order.rejectedAt = new Date();
     
     // Track who made the change
     if (status === 'approved') order.approvedBy = req.user.id;
+    if (status === 'fulfilled') order.fulfilledBy = req.user.id;
     if (status === 'rejected') order.rejectedBy = req.user.id;
     
     // Add to status history
     order.statusHistory.push({
       status,
       changedBy: req.user.id,
-      notes: notes || `Status changed from ${previousStatus} to ${status}`
+      notes: notes || `Status changed from ${previousStatus} to ${status}`,
+      changedAt: new Date()
     });
 
     await order.save();
@@ -3321,6 +3454,7 @@ app.patch('/api/orders/:id/status', verifyToken, async (req, res) => {
     const updatedOrder = await Order.findById(order._id)
       .populate('store', 'storeName proprietorName')
       .populate('approvedBy', 'name')
+      .populate('fulfilledBy', 'name')
       .populate('rejectedBy', 'name');
 
     res.json({

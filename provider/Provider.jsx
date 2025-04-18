@@ -16,6 +16,7 @@ const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [products,setProducts] = useState([]);
   const [officers,setOfficers] = useState([]);
+  const [currentOfficer,setCurrentOfficer] = useState({});
   const [stores, setStores] = useState([]);
   const [myStores, setMyStores] = useState([]);
   const [currentStore,setCurrentStore] = useState({})
@@ -84,32 +85,38 @@ const AuthProvider = ({ children }) => {
   }, [axiosSecure]);
 
   const handleLogin = async (values) => {
-    setLoading(true);
-    try {
-      const res = await axiosPublic.post('/login', values);
-      if (res.data.token) {
-        await AsyncStorage.setItem('authToken', res.data.token);
-        const userResponse = await axiosSecure.get('/current-user');
-        
-        // Verify user is active after login
-        if (userResponse.data.user.status !== 'active') {
-          showMessage('Your account is not active', 'error');
-          await handleLogout();
-          return;
-        }
+  setLoading(true);
+  try {
+    // Determine if we're using email or phone
+    const credentials = values.email 
+      ? { email: values.email, password: values.password }
+      : { phone: values.phone, password: values.password };
 
-        setUser(userResponse.data.user);
-        showMessage('Login successful!', 'success');
-        router.replace('/');
-      } else {
-        showMessage('Login failed: No token received', 'error');
+    const res = await axiosPublic.post('/login', credentials);
+    
+    if (res.data.token) {
+      await AsyncStorage.setItem('authToken', res.data.token);
+      const userResponse = await axiosSecure.get('/current-user');
+      
+      // Verify user is active after login
+      if (userResponse.data.user.status !== 'active') {
+        showMessage('Your account is not active', 'error');
+        await handleLogout();
+        return;
       }
-    } catch (error) {
-      showMessage(getErrorMessage(error), 'error');
-    } finally {
-      setLoading(false);
+
+      setUser(userResponse.data.user);
+      showMessage('Login successful!', 'success');
+      router.replace('/');
+    } else {
+      showMessage('Login failed: No token received', 'error');
     }
-  };
+  } catch (error) {
+    showMessage(getErrorMessage(error), 'error');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleRegister = async (values) => {
     setLoading(true);
@@ -160,6 +167,50 @@ const AuthProvider = ({ children }) => {
   }, [router.pathname]);
   
   
+  
+  // -----------------&&Users-------------------
+  
+  const handleGetAllUsers = async (filters = {}) => {
+  setLoading(true);
+  try {
+    const queryParams = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value) queryParams.append(key, value);
+    });
+
+    const res = await axiosSecure.get(`/users?${queryParams.toString()}`);
+    if (res.data.success) {
+      return {
+        success: true,
+        users: res.data.users,
+        count: res.data.count
+      };
+    }
+    throw new Error('Failed to fetch users');
+  } catch (error) {
+    showMessage(getErrorMessage(error), 'error');
+    return { success: false, users: [] };
+  } finally {
+    setLoading(false);
+  }
+};
+
+const handleUpdateUserStatus = async (userId, status) => {
+  setLoading(true);
+  try {
+    const res = await axiosSecure.patch(`/users/${userId}/status`, { status });
+    if (res.data.success) {
+      showMessage(`User status updated to ${status}`, 'success');
+      return { success: true, user: res.data.user };
+    }
+    throw new Error(res.data.message || 'Status update failed');
+  } catch (error) {
+    showMessage(getErrorMessage(error), 'error');
+    return { success: false };
+  } finally {
+    setLoading(false);
+  }
+};
   
 //__________________________Products cruds_________________________________
   // Product CRUD Handlers
@@ -342,14 +393,15 @@ const handleGetOfficerById = async (officerId) => {
   try {
     const res = await axiosSecure.get(`/officers/${officerId}`);
     if (res.data.success) {
-      return res.data.officer;
+      setCurrentOfficer(res.data.officer)
+      
     } else {
       showMessage('Failed to fetch officer details', 'error');
-      return null;
+      return { success: false };
     }
   } catch (error) {
     showMessage(getErrorMessage(error), 'error');
-    return null;
+    return { success: false };
   } finally {
     setLoading(false);
   }
@@ -939,7 +991,7 @@ const handleGetOrderHistory = async (orderId) => {
 };
 
 
-
+console.log(currentOfficer)
 
 useEffect(()=>{
   handleGetAllProducts();
@@ -990,7 +1042,12 @@ useEffect(()=>{
     handleApproveOrder,
     handleRejectOrder,
     handleUpdateOrderStatus,
-    handleGetOrderHistory
+    handleGetOrderHistory,
+    handleGetOfficerById,
+    currentOfficer,
+    
+    handleGetAllUsers,
+    handleUpdateUserStatus
   };
 
   return (

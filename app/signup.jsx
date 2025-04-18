@@ -1,53 +1,57 @@
-import React, { useState,useContext } from "react";
+import React, { useState, useContext } from "react";
 import { View, StyleSheet, Image, ScrollView } from "react-native";
-import { TextInput, Button, Text } from "react-native-paper";
+import { TextInput, Button, Text, RadioButton } from "react-native-paper";
 import { Formik } from "formik";
 import * as Yup from "yup";
 import { Link } from "expo-router";
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {ServicesProvider} from '../provider/Provider.jsx';
-
+import { ServicesProvider } from '../provider/Provider.jsx';
 
 const SignupScreen = () => {
-  const {handleRegister,loading} = useContext(ServicesProvider);
+  const { handleRegister, loading } = useContext(ServicesProvider);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] = useState(false);
 
   const SignupSchema = Yup.object().shape({
-    name: Yup.string().required("পূর্ণ নাম আবশ্যক"),
-    email: Yup.string().email("সঠিক ইমেইল দিন").required("ইমেইল আবশ্যক"),
+    name: Yup.string().required("Full name is required"),
+    email: Yup.string().email("Enter a valid email").required("Email is required"),
     phone: Yup.string()
-      .matches(/^\+?\d{10,14}$/, "সঠিক ফোন নম্বর দিন")
-      .required("ফোন নম্বর আবশ্যক"),
-    area: Yup.string().required("এলাকা নির্বাচন করুন"),
+      .matches(/^\+?\d{10,14}$/, "Enter a valid phone number")
+      .required("Phone number is required"),
+    area: Yup.string().required("Select an area"),
+    role: Yup.string().required("Select a role"),
     password: Yup.string()
-      .min(6, "পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে")
-      .required("পাসওয়ার্ড আবশ্যক"),
+      .min(6, "Password must be at least 6 characters")
+      .required("Password is required"),
+    confirmPassword: Yup.string()
+      .oneOf([Yup.ref('password'), null], 'Passwords must match')
+      .required('Confirm your password')
   });
-
-  
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <Image source={require("../assets/images/adarsha.png")} style={styles.logo} />
-        <Text style={styles.companyName}>আদর্শ এগ্রো ভেট</Text>
-        <Text style={styles.title}>নিবন্ধন করুন</Text>
+        <Text style={styles.companyName}>Adarsha Agro Vet</Text>
+        <Text style={styles.title}>Sign Up</Text>
 
         <Formik
-          initialValues={{ 
-            name: "", 
-            email: "", 
-            phone: "", 
-            area: "", 
-            password: "" 
+          initialValues={{
+            name: "",
+            email: "",
+            phone: "",
+            area: "",
+            role: "officer",
+            password: "",
+            confirmPassword: ""
           }}
           validationSchema={SignupSchema}
           onSubmit={handleRegister}
         >
-          {({ handleChange, handleBlur, handleSubmit, values, errors, touched }) => (
+          {({ handleChange, handleBlur, handleSubmit, values, errors, touched, setFieldValue }) => (
             <>
               <TextInput
-                label="পূর্ণ নাম"
+                label="Full Name"
                 mode="outlined"
                 style={styles.input}
                 onChangeText={handleChange("name")}
@@ -58,7 +62,7 @@ const SignupScreen = () => {
               {touched.name && errors.name && <Text style={styles.error}>{errors.name}</Text>}
 
               <TextInput
-                label="ইমেইল"
+                label="Email"
                 mode="outlined"
                 keyboardType="email-address"
                 style={styles.input}
@@ -70,7 +74,7 @@ const SignupScreen = () => {
               {touched.email && errors.email && <Text style={styles.error}>{errors.email}</Text>}
 
               <TextInput
-                label="ফোন নম্বর"
+                label="Phone Number"
                 mode="outlined"
                 keyboardType="phone-pad"
                 style={styles.input}
@@ -82,7 +86,7 @@ const SignupScreen = () => {
               {touched.phone && errors.phone && <Text style={styles.error}>{errors.phone}</Text>}
 
               <TextInput
-                label="এলাকা"
+                label="Area"
                 mode="outlined"
                 style={styles.input}
                 onChangeText={handleChange("area")}
@@ -92,8 +96,29 @@ const SignupScreen = () => {
               />
               {touched.area && errors.area && <Text style={styles.error}>{errors.area}</Text>}
 
+              <Text style={styles.sectionTitle}>Select a Role</Text>
+              <View style={styles.radioGroup}>
+                <View style={styles.radioItem}>
+                  <RadioButton
+                    value="officer"
+                    status={values.role === 'officer' ? 'checked' : 'unchecked'}
+                    onPress={() => setFieldValue('role', 'officer')}
+                  />
+                  <Text style={styles.radioLabel}>Officer</Text>
+                </View>
+                <View style={styles.radioItem}>
+                  <RadioButton
+                    value="stock-manager"
+                    status={values.role === 'stock-manager' ? 'checked' : 'unchecked'}
+                    onPress={() => setFieldValue('role', 'stock-manager')}
+                  />
+                  <Text style={styles.radioLabel}>Stock Manager</Text>
+                </View>
+              </View>
+              {touched.role && errors.role && <Text style={styles.error}>{errors.role}</Text>}
+
               <TextInput
-                label="পাসওয়ার্ড"
+                label="Password"
                 mode="outlined"
                 style={styles.input}
                 secureTextEntry={!isPasswordVisible}
@@ -110,19 +135,39 @@ const SignupScreen = () => {
               />
               {touched.password && errors.password && <Text style={styles.error}>{errors.password}</Text>}
 
-              <Button 
-                mode="outlined" 
-                onPress={handleSubmit} 
+              <TextInput
+                label="Confirm Password"
+                mode="outlined"
+                style={styles.input}
+                secureTextEntry={!isConfirmPasswordVisible}
+                right={
+                  <TextInput.Icon
+                    icon={isConfirmPasswordVisible ? "eye-off" : "eye"}
+                    onPress={() => setIsConfirmPasswordVisible(!isConfirmPasswordVisible)}
+                  />
+                }
+                onChangeText={handleChange("confirmPassword")}
+                onBlur={handleBlur("confirmPassword")}
+                value={values.confirmPassword}
+                error={touched.confirmPassword && errors.confirmPassword}
+              />
+              {touched.confirmPassword && errors.confirmPassword && (
+                <Text style={styles.error}>{errors.confirmPassword}</Text>
+              )}
+
+              <Button
+                mode="outlined"
+                onPress={handleSubmit}
                 style={styles.button}
                 loading={loading}
                 disabled={loading}
               >
-                {!loading && 'নিবন্ধন করুন'}
+                {!loading && 'Sign Up'}
               </Button>
 
               <Link style={{marginTop: 10}} href="/signin">
                 <Text style={styles.link}>
-                  ইতোমধ্যে একটি অ্যাকাউন্ট আছে? <Text style={styles.linkBold}>লগইন করুন</Text>
+                  Already have an account? <Text style={styles.linkBold}>Log In</Text>
                 </Text>
               </Link>
             </>
@@ -189,6 +234,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginBottom: 5,
     alignSelf: "flex-start",
+  },
+  sectionTitle: {
+    fontSize: 16,
+    marginBottom: 8,
+    alignSelf: "flex-start",
+    color: "#333",
+  },
+  radioGroup: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+    marginBottom: 12,
+  },
+  radioItem: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  radioLabel: {
+    marginLeft: 8,
+    color: "#333",
   },
 });
 

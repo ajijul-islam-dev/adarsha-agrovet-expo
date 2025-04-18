@@ -45,7 +45,7 @@ const OrdersListScreen = () => {
         {/* Header */}
         <View style={styles.header}>
           <Text variant="headlineSmall" style={styles.headerText}>
-            All Orders
+            My Orders
           </Text>
         </View>
 
@@ -106,10 +106,10 @@ const OrdersListScreen = () => {
                 <View style={styles.cardHeader}>
                   <View>
                     <Text variant="titleMedium" style={styles.officerName}>
-                      {item.createdBy?.name || 'Unknown Officer'}
+                      {item.store.storeName || 'Unknown Officer'}
                     </Text>
                     <Text variant="bodySmall" style={styles.storeName}>
-                      {item.store?.storeName || 'Unknown Store'}
+                      {item.store?.proprietorName || 'Unknown Store'}
                     </Text>
                   </View>
                   <Text 
