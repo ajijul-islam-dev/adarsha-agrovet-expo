@@ -389,6 +389,7 @@ const handleGetAllOfficers = async (searchQuery = "", areaFilter = "all") => {
 };
 
 const handleGetOfficerById = async (officerId) => {
+ 
   setLoading(true);
   try {
     const res = await axiosSecure.get(`/officers/${officerId}`);
@@ -990,14 +991,13 @@ const handleGetOrderHistory = async (orderId) => {
   }
 };
 
-
-console.log(currentOfficer)
-
 useEffect(()=>{
   handleGetAllProducts();
   handleGetAllOfficers();
   handleGetAllStores();
   handleGetMyStores();
+  handleGetAllOrders();
+  handleGetOfficerById(user?._id);
 },[]);
 
 

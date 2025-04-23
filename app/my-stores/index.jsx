@@ -18,6 +18,7 @@ const MyStoresScreen = () => {
   const uniqueAreas = ["all", ...new Set(myStores.map(store => store.area))];
 
   // Fetch user's myStores when search or filter changes
+  console.log('1111111111111',myStores)
   useEffect(() => {
     handleGetMyStores(searchQuery, filterOption === "all" ? "" : filterOption);
   }, [searchQuery, filterOption]);
@@ -168,7 +169,7 @@ const MyStoresScreen = () => {
                               : theme.colors.onSurfaceVariant
                           }
                         ]}>
-                          ৳{(item.totalFinalDues || 0).toLocaleString()}
+                          ৳{(item.totalOutstanding - item.totalPaidAmount || 0).toLocaleString()}
                         </Text>
                       </View>
                     )}

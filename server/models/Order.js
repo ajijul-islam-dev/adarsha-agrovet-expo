@@ -12,14 +12,8 @@ const orderSchema = new mongoose.Schema({
       ref: 'Product',
       required: true
     },
-    name: {
-      type: String,
-      required: true
-    },
-    price: {
-      type: Number,
-      required: true
-    },
+    name: String,
+    price: Number,
     packSize: String,
     unit: String,
     quantity: {
@@ -73,57 +67,59 @@ const orderSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Track previous status for stock management
-orderSchema.pre('save', function(next) {
-  if (this.isModified('status')) {
-    this._previousStatus = this._originalStatus || this.status;
-    this._originalStatus = this.status;
+// Enable access to previous document values
+orderSchema.pre('save', async function (next) {
+  if (this.isModified('status') && !this._previousStatus) {
+    const existing = await this.constructor.findById(this._id).lean();
+    this._previousStatus = existing?.status || 'draft';
   }
   next();
 });
 
-// Handle stock changes based on order status
-orderSchema.pre('save', async function(next) {
-  if (this.isModified('status')) {
-    const session = this.$session();
-    
-    try {
-      // Add to status history
-      this.statusHistory = this.statusHistory || [];
-      this.statusHistory.push({
-        status: this.status,
-        changedBy: this._updatedBy,
-        changedAt: new Date(),
-        notes: this.status === 'rejected' ? this.rejectionReason : ''
-      });
+// Handle stock updates and status history
+orderSchema.pre('save', async function (next) {
+  if (!this.isModified('status')) return next();
 
-      // Handle stock changes
-      if (this.status === 'rejected' && this._previousStatus === 'pending') {
-        // Revert stock for rejected orders
-        for (const item of this.products) {
-          await mongoose.model('Product').updateOne(
-            { _id: item.product },
-            { $inc: { stock: item.quantity + (item.bonusQuantity || 0) } },
-            { session }
-          );
-        }
-      } else if (this.status === 'pending' && this._previousStatus === 'draft') {
-        // Reduce stock when order is submitted
-        for (const item of this.products) {
-          await mongoose.model('Product').updateOne(
-            { _id: item.product },
-            { $inc: { stock: - (item.quantity + (item.bonusQuantity || 0)) } },
-            { session }
-          );
-        }
+  const session = this.$session();
+  const prev = this._previousStatus;
+  const curr = this.status;
+
+  console.log(`Order ${this._id} status change: ${prev} → ${curr}`);
+
+  try {
+    this.statusHistory = this.statusHistory || [];
+    this.statusHistory.push({
+      status: this.status,
+      changedBy: this._updatedBy,
+      changedAt: new Date(),
+      notes: this.status === 'rejected' ? this.rejectionReason : ''
+    });
+
+    const Product = mongoose.model('Product');
+
+    if ((curr === 'rejected') && (prev === 'pending' || prev === 'approved')) {
+      for (const item of this.products) {
+        await Product.updateOne(
+          { _id: item.product },
+          { $inc: { stock: item.quantity + (item.bonusQuantity || 0) } },
+          { session }
+        );
+        console.log(`Stock reverted for product ${item.product}`);
       }
-
-      next();
-    } catch (error) {
-      next(error);
+    } else if (curr === 'pending' && prev === 'draft') {
+      for (const item of this.products) {
+        await Product.updateOne(
+          { _id: item.product },
+          { $inc: { stock: -(item.quantity + (item.bonusQuantity || 0)) } },
+          { session }
+        );
+        console.log(`Stock deducted for product ${item.product}`);
+      }
     }
-  } else {
+
     next();
+  } catch (err) {
+    next(err);
   }
 });
 

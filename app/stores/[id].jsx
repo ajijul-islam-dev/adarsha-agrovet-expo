@@ -134,10 +134,32 @@ const OverviewTab = ({ currentStore, id, theme, onRefresh, refreshing }) => {
             <View style={styles.summaryRow}>
               <View style={styles.summaryItem}>
                 <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>
-                  Total Orders
+                  Last Due
                 </Text>
                 <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]}>
-                  {formatCurrency(currentStore?.totalFromOrders || 0)}
+                 ({formatCurrency(currentStore?.dueHistory[currentStore?.dueHistory.length -1]?.amount || 0)})
+                 {' '}
+          {new Date(currentStore.dueHistory.at(-1)?.createdAt).toLocaleDateString('en-GB')}
+                </Text>
+              </View>
+              <View style={styles.summaryItem}>
+                <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>
+                  Last Payment
+                </Text>
+                <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]}>
+                 ({formatCurrency(currentStore?.paymentHistory[currentStore.paymentHistory.length -1]?.amount || 0)})
+                 {' '}
+          {new Date(currentStore.paymentHistory.at(-1)?.createdAt).toLocaleDateString('en-GB')}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.summaryRow}>
+              <View style={styles.summaryItem}>
+                <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>
+                  Total Orders Count
+                </Text>
+                <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]}>
+                  {(currentStore?.orderHistory.length || 0)}
                 </Text>
               </View>
               <View style={styles.summaryItem}>
@@ -152,7 +174,7 @@ const OverviewTab = ({ currentStore, id, theme, onRefresh, refreshing }) => {
             <View style={styles.summaryRow}>
               <View style={styles.summaryItem}>
                 <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>
-                  Total Dues
+                  Total Bussiness
                 </Text>
                 <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]}>
                   {formatCurrency(currentStore?.totalFromDues || 0)}
@@ -160,10 +182,10 @@ const OverviewTab = ({ currentStore, id, theme, onRefresh, refreshing }) => {
               </View>
               <View style={[styles.summaryItem, styles.highlightItem]}>
                 <Text style={[styles.summaryLabel, { color: theme.colors.onPrimaryContainer }]}>
-                  Current Balance
+                  Current Dues
                 </Text>
                 <Text style={[styles.summaryValue, { color: theme.colors.onPrimaryContainer, fontWeight: 'bold' }]}>
-                  {formatCurrency(currentStore?.totalFinalDues || 0)}
+                  {formatCurrency(currentStore.totalFromDues- currentStore.totalPaidAmount || 0)}
                 </Text>
               </View>
             </View>
@@ -966,7 +988,7 @@ const DuesTab = ({ currentStore, id, theme, handleAddStoreDue, loading, refetchS
                 <DataTable.Cell></DataTable.Cell>
                 <DataTable.Cell numeric>
                   <Text style={{ fontWeight: 'bold' }}>
-                    {formatCurrency(currentStore.totalFromDues + currentStore?.totalFromOrders|| 0)}
+                    {formatCurrency(currentStore.totalFromDues || 0)}
                   </Text>
                 </DataTable.Cell>
               </DataTable.Row>
@@ -1079,10 +1101,10 @@ const StoreDetailsScreen = () => {
     handleAddStoreDue,
     showMessage
   } = useContext(ServicesProvider);
+
   const [refreshing, setRefreshing] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
   const [tabIndex, setTabIndex] = useState(0);
-  console.log(currentStore)
   const indicatorPosition = useRef(new Animated.Value(0)).current;
 
   const refetchStoreDetails = async () => {

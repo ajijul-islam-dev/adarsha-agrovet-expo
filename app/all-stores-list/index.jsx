@@ -9,6 +9,7 @@ import { ServicesProvider } from '../../provider/Provider.jsx';
 const AllStoresScreen = () => {
   const theme = useTheme();
   const { handleGetAllStores, loading, stores, showMessage } = useContext(ServicesProvider);
+  console.log('%%%%%%$$$$$$$$',stores[2])
   const [searchQuery, setSearchQuery] = useState("");
   const [filterVisible, setFilterVisible] = useState(false);
   const [filterOption, setFilterOption] = useState("all");
@@ -141,7 +142,7 @@ const AllStoresScreen = () => {
                     right={() => (
                       <View style={[styles.dueBadge, { backgroundColor: theme.colors.errorContainer }]}>
                         <Text style={[styles.dueBadgeText, { color: theme.colors.onErrorContainer }]}>
-                          ৳{(item.totalFinalDues || 0).toLocaleString()}
+                          ৳{(item.totalDues - item.totalPaidAmount || 0).toLocaleString()}
                         </Text>
                       </View>
                     )}

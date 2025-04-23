@@ -526,7 +526,6 @@ const OfficerDetailsScreen = () => {
     await handleGetOfficerById(id);
     setRefreshing(false);
   };
-
   useEffect(() => {
     const loadData = async () => {
       setInitialLoad(true);
