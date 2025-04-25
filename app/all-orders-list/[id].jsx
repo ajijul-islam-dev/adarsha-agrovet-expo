@@ -260,10 +260,11 @@ const OrderDetailsScreen = () => {
                 <View style={styles.productRow}>
                   <View style={styles.productInfo}>
                     <Text variant="bodyLarge" style={styles.productName}>
-                      {product.productName || product.name}
+                      {product.productName || product.name} {product.packSize + ' '}    
+                      {product.unit}
                     </Text>
                     <Text style={{ color: theme.colors.onSurfaceVariant }}>
-                      {product.quantity} {product.unit} × ৳{product.price?.toLocaleString()}
+                      {product.quantity} × ৳{product.price?.toLocaleString()}
                       {product.bonusQuantity > 0 && (
                         <Text style={{ color: theme.colors.primary }}> (+{product.bonusQuantity} bonus)</Text>
                       )}

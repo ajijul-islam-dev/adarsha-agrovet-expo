@@ -1,32 +1,129 @@
-import { useContext } from 'react'
-import { View, StyleSheet, ScrollView, Image, Dimensions } from "react-native";
-import { Appbar, Card, Text, useTheme } from "react-native-paper";
+import { useContext, useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, Image, Dimensions, RefreshControl } from "react-native";
+import { Appbar, Card, Text, useTheme, ActivityIndicator } from "react-native-paper";
 import { Link } from "expo-router";
 import { FontAwesome5 } from "@expo/vector-icons";
 import { ServicesProvider } from '../../provider/Provider.jsx';
+import useAxios from '../../hooks/useAxios.js';
 
 const { width } = Dimensions.get('window');
 
 const HomeScreen = () => {
-  const { user, products, stores, orders,handleGetOfficerById,currentOfficer} = useContext(ServicesProvider);
-  // Calculate pending orders
-  const pendingOrders = orders.filter(order => order.status === 'pending').length;
-  
-  // Dynamic metrics data for first row
-  const firstRowMetrics = [
-    { title: "Total Products", value: products.length, icon: "box-open", color: "#4CAF50" },
-    { title: "Active Stores", value: stores.length, icon: "store", color: "#2196F3" },
-    { title: "Pending Orders", value: pendingOrders, icon: "shopping-cart", color: "#FF9800" },
-  ];
+  const { axiosSecure } = useAxios();
+  const { user } = useContext(ServicesProvider);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const theme = useTheme();
 
-  // Second row metrics (example values - replace with actual calculations)
-  const secondRowMetrics = [
-    { title: "Total Businesses", value: "25", icon: "building", color: "#9C27B0" },
-    { title: "Total Paid", value: "৳12,500", icon: "money-bill-wave", color: "#009688" },
-    { title: "Total Dues", value: "৳3,200", icon: "exclamation-triangle", color: "#F44336" },
-  ];
+  const fetchStats = async () => {
+    try {
+      const response = await axiosSecure.get('/api/home-stats');
+      setStats(response.data);
+    } catch (error) {
+      console.error('Failed to fetch stats:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
-  // Role-based quick actions for all roles
+  useEffect(() => {
+    fetchStats();
+  }, []);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchStats();
+  };
+
+  // Role-based metrics configuration
+  const getMetrics = () => {
+    const commonFirstRow = [
+      { 
+        title: "Total Products", 
+        value: loading ? '--' : stats?.metrics?.totalProducts || 0, 
+        icon: "box-open", 
+        color: "#4CAF50" 
+      },
+      { 
+        title: "Active Stores", 
+        value: loading ? '--' : stats?.metrics?.activeStores || 0, 
+        icon: "store", 
+        color: "#2196F3" 
+      }
+    ];
+
+    const commonSecondRow = [
+      { 
+        title: "Total Business", 
+        value: loading ? '--' : stats?.financial?.totalBusiness || '৳0', 
+        color: "#9C27B0" 
+      },
+      { 
+        title: "Total Paid", 
+        value: loading ? '--' : stats?.financial?.totalPaid || '৳0', 
+        color: "#009688" 
+      },
+      { 
+        title: "Current Dues", 
+        value: loading ? '--' : stats?.financial?.currentDues || '৳0', 
+        color: "#F44336" 
+      }
+    ];
+
+    if (user?.role === 'admin') {
+      return {
+        firstRow: [
+          ...commonFirstRow,
+          { 
+            title: "Pending Orders", 
+            value: loading ? '--' : stats?.metrics?.pendingOrders || 0, 
+            icon: "shopping-cart", 
+            color: "#FF9800" 
+          }
+        ],
+        secondRow: commonSecondRow
+      };
+    } else if (user?.role === 'officer') {
+      return {
+        firstRow: [
+          ...commonFirstRow,
+          { 
+            title: "My Pending Orders", 
+            value: loading ? '--' : stats?.metrics?.pendingOrders || 0, 
+            icon: "shopping-cart", 
+            color: "#FF9800" 
+          }
+        ],
+        secondRow: commonSecondRow
+      };
+    } else if (user?.role === 'stock-manager') {
+      return {
+        firstRow: [
+          ...commonFirstRow,
+          { 
+            title: "Approved Orders", 
+            value: loading ? '--' : stats?.metrics?.pendingOrders || 0, 
+            icon: "shopping-cart", 
+            color: "#FF9800" 
+          }
+        ],
+        secondRow: commonSecondRow.map(metric => ({
+          ...metric,
+          value: '--' // Stock managers don't see financial data
+        }))
+      };
+    }
+
+    return {
+      firstRow: commonFirstRow,
+      secondRow: commonSecondRow
+    };
+  };
+
+  const { firstRow, secondRow } = getMetrics();
+
   const getQuickActions = () => {
     const commonActions = [
       { title: "Products", icon: "box-open", href: "/product-stock", color: "#4CAF50" },
@@ -57,6 +154,40 @@ const HomeScreen = () => {
     return commonActions;
   };
 
+  const MetricCard = ({ metric }) => (
+    <View style={[styles.metricCard, { backgroundColor: metric.color }]}>
+      {loading ? (
+        <ActivityIndicator animating={true} color="#FFF" />
+      ) : (
+        <>
+          {metric.icon && (
+            <FontAwesome5 
+              name={metric.icon} 
+              size={24} 
+              color="#FFF" 
+              style={styles.metricIcon} 
+            />
+          )}
+          <Text style={[
+            styles.metricValue,
+            !metric.icon && styles.metricValueNoIcon
+          ]}>
+            {metric.value}
+          </Text>
+          <Text style={styles.metricTitle}>{metric.title}</Text>
+        </>
+      )}
+    </View>
+  );
+
+  if (loading && !refreshing && !stats) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator animating={true} size="large" />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.safeContainer}>
       <Appbar.Header style={styles.appbar}>
@@ -74,8 +205,14 @@ const HomeScreen = () => {
       <ScrollView 
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[theme.colors.primary]}
+          />
+        }
       >
-        {/* Welcome Section */}
         <View style={styles.welcomeContainer}>
           <Text style={styles.welcomeText}>Welcome, {user?.name || "User"}</Text>
           <View style={styles.roleContainer}>
@@ -83,29 +220,18 @@ const HomeScreen = () => {
           </View>
         </View>
 
-        {/* First Row Metrics */}
         <View style={styles.metricsContainer}>
-          {firstRowMetrics.map((metric, index) => (
-            <View key={`first-${index}`} style={[styles.metricCard, { backgroundColor: metric.color }]}>
-              <FontAwesome5 name={metric.icon} size={24} color="#FFF" style={styles.metricIcon} />
-              <Text style={styles.metricValue}>{metric.value}</Text>
-              <Text style={styles.metricTitle}>{metric.title}</Text>
-            </View>
+          {firstRow.map((metric, index) => (
+            <MetricCard key={`first-${index}`} metric={metric} />
           ))}
         </View>
 
-        {/* Second Row Metrics */}
         <View style={styles.metricsContainer}>
-          {secondRowMetrics.map((metric, index) => (
-            <View key={`second-${index}`} style={[styles.metricCard, { backgroundColor: metric.color }]}>
-              <FontAwesome5 name={metric.icon} size={24} color="#FFF" style={styles.metricIcon} />
-              <Text style={styles.metricValue}>{metric.value}</Text>
-              <Text style={styles.metricTitle}>{metric.title}</Text>
-            </View>
+          {secondRow.map((metric, index) => (
+            <MetricCard key={`second-${index}`} metric={metric} />
           ))}
         </View>
 
-        {/* Quick Actions */}
         <Text style={styles.sectionTitle}>Quick Access</Text>
         <View style={styles.actionsGrid}>
           {getQuickActions().map((action, index) => (
@@ -136,6 +262,11 @@ const styles = StyleSheet.create({
   safeContainer: {
     flex: 1,
     backgroundColor: "#F8F9FA",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   appbar: {
     backgroundColor: "#FFF",
@@ -190,7 +321,7 @@ const styles = StyleSheet.create({
   },
   metricCard: {
     flex: 1,
-    aspectRatio: 1, // Makes the cards square
+    aspectRatio: 1,
     borderRadius: 12,
     padding: 8,
     alignItems: 'center',
@@ -201,12 +332,16 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   metricValue: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: "bold",
     color: "#FFF",
     marginBottom: 4,
     textAlign: 'center',
     includeFontPadding: false,
+  },
+  metricValueNoIcon: {
+    fontSize: 16,
+    marginTop: 8,
   },
   metricTitle: {
     fontSize: 12,
@@ -229,7 +364,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   actionItem: {
-    width: width > 400 ? '48%' : '100%', // Responsive width
+    width: width > 400 ? '48%' : '100%',
   },
   actionCard: {
     borderRadius: 12,

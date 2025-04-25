@@ -30,6 +30,7 @@ const ProductStockScreen = () => {
   const [draftOrder, setDraftOrder] = useState(null);
   const [creatingOrder, setCreatingOrder] = useState(false);
   const [submittingOrder, setSubmittingOrder] = useState(false);
+  const [deletingOrder, setDeletingOrder] = useState(false);
   
   const {axiosSecure} = useAxios();
   const { 
@@ -39,6 +40,7 @@ const ProductStockScreen = () => {
     handleUpdateProductStock,
     handleUpdateProduct,
     showMessage,
+    handleDeleteOrder,
     user
   } = useContext(ServicesProvider);
 
@@ -55,6 +57,7 @@ const ProductStockScreen = () => {
       });
       if (response.data.success) {
         setDraftOrder(response.data.order);
+        setPaymentMethod(response.data.order?.paymentMethod || 'cash');
       } else {
         setDraftOrder(null);
       }
@@ -69,7 +72,6 @@ const ProductStockScreen = () => {
       setOrderQuantity(1);
       setDiscountPercentage(0);
       setBonusQuantity(0);
-      setPaymentMethod('cash');
       
       if (draftOrder) {
         const existingProduct = draftOrder.products.find(
@@ -216,7 +218,8 @@ const ProductStockScreen = () => {
     setSubmittingOrder(true);
     try {
       const response = await axiosSecure.post(
-        `/api/orders/${draftOrder._id}/submit`
+        `/api/orders/${draftOrder._id}/submit`,
+        { paymentMethod }
       );
       
       if (response.data.success) {
@@ -230,6 +233,25 @@ const ProductStockScreen = () => {
       console.error('Submit error:', error);
     } finally {
       setSubmittingOrder(false);
+    }
+  };
+
+  const handleDeleteDraft = async () => {
+    if (!draftOrder) return;
+    
+    setDeletingOrder(true);
+    try {
+      const result = await handleDeleteOrder(draftOrder._id);
+      if (result.success) {
+        setDraftOrder(null);
+        setDraftModalVisible(false);
+        showMessage('Draft order cancelled', 'success');
+      }
+    } catch (error) {
+      console.error('Delete draft error:', error);
+      showMessage('Failed to cancel draft order', 'error');
+    } finally {
+      setDeletingOrder(false);
     }
   };
 
@@ -251,7 +273,7 @@ const ProductStockScreen = () => {
         <View style={styles.productInfo}>
           <Text style={[styles.price, { color: theme.colors.primary }]}>BDT {item.price}</Text>
           <Text style={styles.packSize} numberOfLines={1} ellipsizeMode="tail">
-            {item.packSize} {item.unit} per pack
+            {item.packSize} {item.unit}
           </Text>
         </View>
         <View style={{ marginLeft: 'auto', flexDirection: 'row', gap: 8 }}>
@@ -282,6 +304,11 @@ const ProductStockScreen = () => {
             <Text variant="headlineSmall" style={styles.headerText}>
               {storeId ? `Order for ${name}` : 'Product Stock'}
             </Text>
+            {storeId && draftOrder && (
+              <Badge style={[styles.draftBadge, { backgroundColor: theme.colors.primary }]}>
+                {draftOrder.products.length}
+              </Badge>
+            )}
           </View>
           
           {storeId && draftOrder && (
@@ -409,7 +436,7 @@ const ProductStockScreen = () => {
                   </TouchableOpacity>
                   <TextInput
                     style={[styles.counterInput, { borderColor: theme.colors.primary, borderRadius: 8 }]}
-                    value={orderQuantity.toString()}
+                    placeholder={orderQuantity.toString()}
                     onChangeText={(value) => setOrderQuantity(value === "" ? 1 : Math.max(1, parseInt(value) || 1))}
                   />
                   <TouchableOpacity
@@ -426,7 +453,7 @@ const ProductStockScreen = () => {
                   <Text variant="bodyMedium" style={styles.label}>Discount (%)</Text>
                   <TextInput
                     mode="outlined"
-                    value={discountPercentage.toString()}
+                    placeholder={discountPercentage.toString()}
                     onChangeText={(text) => setDiscountPercentage(Math.min(100, Math.max(0, parseInt(text) || 0)))}
                     style={[styles.smallInput, { borderRadius: 8 }]}
                     right={<TextInput.Affix text="%" />}
@@ -438,7 +465,7 @@ const ProductStockScreen = () => {
                   <Text variant="bodyMedium" style={styles.label}>Bonus Qty</Text>
                   <TextInput
                     mode="outlined"
-                    value={bonusQuantity.toString()}
+                    placeholder={bonusQuantity.toString()}
                     onChangeText={(text) => setBonusQuantity(Math.max(0, parseInt(text) || 0))}
                     style={[styles.smallInput, { borderRadius: 8 }]}
                     outlineColor={theme.colors.outline}
@@ -453,24 +480,30 @@ const ProductStockScreen = () => {
                   <TouchableOpacity
                     style={[
                       styles.paymentMethodButton,
-                      paymentMethod === 'cash' && styles.paymentMethodSelected,
+                      paymentMethod === 'cash' && { 
+                        backgroundColor: theme.colors.primary,
+                        borderColor: theme.colors.primary 
+                      },
                       { borderColor: theme.colors.primary }
                     ]}
                     onPress={() => setPaymentMethod('cash')}
                   >
-                    <Text style={paymentMethod === 'cash' ? { color: 'white' } : { color: theme.colors.primary }}>
+                    <Text style={paymentMethod === 'cash' ? { color: theme.colors.onPrimary } : { color: theme.colors.primary }}>
                       Cash
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[
                       styles.paymentMethodButton,
-                      paymentMethod === 'credit' && styles.paymentMethodSelected,
+                      paymentMethod === 'credit' && { 
+                        backgroundColor: theme.colors.primary,
+                        borderColor: theme.colors.primary 
+                      },
                       { borderColor: theme.colors.primary }
                     ]}
                     onPress={() => setPaymentMethod('credit')}
                   >
-                    <Text style={paymentMethod === 'credit' ? { color: 'white' } : { color: theme.colors.primary }}>
+                    <Text style={paymentMethod === 'credit' ? { color: theme.colors.onPrimary } : { color: theme.colors.primary }}>
                       Credit
                     </Text>
                   </TouchableOpacity>
@@ -535,7 +568,9 @@ const ProductStockScreen = () => {
               </View>
               
               <Text variant="bodyMedium" style={{ marginBottom: 16 }}>
-                {selectedProduct?.productName}
+                {selectedProduct?.productName +' '}
+                {selectedProduct?.packSize +' '}
+                {selectedProduct?.unit}
               </Text>
 
               <View style={styles.modalSection}>
@@ -554,7 +589,7 @@ const ProductStockScreen = () => {
                   </TouchableOpacity>
                   <TextInput
                     style={[styles.counterInput, { borderColor: theme.colors.primary, borderRadius: 8 }]}
-                    value={orderQuantity.toString()}
+                    placeholder={orderQuantity.toString()}
                     onChangeText={(value) =>
                       setOrderQuantity(value === "" ? 0 : Math.max(0, parseInt(value) || 0))
                     }
@@ -608,7 +643,7 @@ const ProductStockScreen = () => {
               <View style={styles.modalSection}>
                 <TextInput
                   label="Product Name"
-                  value={editedProduct?.productName || ''}
+                  placeholder={editedProduct?.productName || ''}
                   onChangeText={(text) => setEditedProduct({...editedProduct, productName: text})}
                   mode="outlined"
                   style={[styles.editInput, { borderRadius: 8 }]}
@@ -617,7 +652,7 @@ const ProductStockScreen = () => {
                 />
                 <TextInput
                   label="Price (BDT)"
-                  value={editedProduct?.price?.toString() || ''}
+                  placeholder={editedProduct?.price?.toString() || ''}
                   onChangeText={(text) => setEditedProduct({...editedProduct, price: parseFloat(text) || 0})}
                   mode="outlined"
                   keyboardType="numeric"
@@ -627,7 +662,7 @@ const ProductStockScreen = () => {
                 />
                 <TextInput
                   label="Pack Size"
-                  value={editedProduct?.packSize?.toString() || ''}
+                  placeholder={editedProduct?.packSize?.toString() || ''}
                   onChangeText={(text) => setEditedProduct({...editedProduct, packSize: text})}
                   mode="outlined"
                   style={[styles.editInput, { borderRadius: 8 }]}
@@ -636,7 +671,7 @@ const ProductStockScreen = () => {
                 />
                 <TextInput
                   label="Unit"
-                  value={editedProduct?.unit || ''}
+                  placeholder={editedProduct?.unit || ''}
                   onChangeText={(text) => setEditedProduct({...editedProduct, unit: text})}
                   mode="outlined"
                   style={[styles.editInput, { borderRadius: 8 }]}
@@ -645,7 +680,7 @@ const ProductStockScreen = () => {
                 />
                 <TextInput
                   label="Current Stock"
-                  value={editedProduct?.stock?.toString() || ''}
+                  placeholder={editedProduct?.stock?.toString() || ''}
                   onChangeText={(text) => setEditedProduct({...editedProduct, stock: parseInt(text) || 0})}
                   mode="outlined"
                   keyboardType="numeric"
@@ -679,77 +714,106 @@ const ProductStockScreen = () => {
           </View>
         </Modal>
 
-        {/* Draft Details Modal */}
-        <Modal
-          visible={draftModalVisible}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setDraftModalVisible(false)}
+       {/* Draft Details Modal */}
+<Modal
+  visible={draftModalVisible}
+  transparent
+  animationType="fade"
+  onRequestClose={() => setDraftModalVisible(false)}
+>
+  <View style={styles.modalBackdrop}>
+    <View style={[styles.modalContainer, { 
+      backgroundColor: theme.colors.background, 
+      borderRadius: 8,
+      maxHeight: '80%'
+    }]}>
+      {/* Modal Header with Close Button */}
+      <View style={styles.modalHeader}>
+        <Text variant="titleLarge" style={styles.modalTitle}>
+          Draft Order Summary
+        </Text>
+        <TouchableOpacity
+          onPress={() => setDraftModalVisible(false)}
+          style={styles.closeButton}
         >
-          <View style={styles.modalBackdrop}>
-            <View style={[styles.modalContainer, { backgroundColor: theme.colors.background, borderRadius: 8 }]}>
-              <Text variant="titleLarge" style={styles.modalTitle}>
-                Draft Order Summary
+          <Icon name="close" size={24} color={theme.colors.onSurface} />
+        </TouchableOpacity>
+      </View>
+      
+      <ScrollView style={{ width: '100%' }}>                
+        <View style={styles.paymentMethodDisplay}>
+          <Text variant="bodyMedium">
+            Payment Method: <Text style={{ fontWeight: 'bold' }}>{paymentMethod}</Text>
+          </Text>
+        </View>
+        
+        <View style={styles.draftItemsContainer}>
+          {draftOrder?.products?.map((item, index) => (
+            <View key={index} style={styles.draftItem}>
+              <View style={{ flex: 2 }}>
+                <Text variant="bodyMedium">{item.name + ' ' + item.packSize + ' '+ item.unit}</Text>
+                {item.bonusQuantity > 0 && (
+                  <Text variant="bodySmall" style={{ color: theme.colors.primary }}>
+                    +{item.bonusQuantity} bonus
+                  </Text>
+                )}
+              </View>
+              <Text variant="bodyMedium" style={{ textAlign: 'right' }}>
+                {item.quantity} × BDT {item.price.toFixed(2)}
+                {item.discountPercentage > 0 && (
+                  <Text style={{ color: theme.colors.error }}>
+                    {' '}({item.discountPercentage}% off)
+                  </Text>
+                )}
               </Text>
-              
-              <View style={styles.paymentMethodDisplay}>
-                <Text variant="bodyMedium">
-                  Payment Method: <Text style={{ fontWeight: 'bold' }}>{draftOrder?.paymentMethod || 'cash'}</Text>
-                </Text>
-              </View>
-              
-              <ScrollView style={styles.draftItemsContainer}>
-                {draftOrder?.products?.map((item, index) => (
-                  <View key={index} style={styles.draftItem}>
-                    <View style={{ flex: 2 }}>
-                      <Text variant="bodyMedium">{item.name}</Text>
-                      {item.bonusQuantity > 0 && (
-                        <Text variant="bodySmall" style={{ color: theme.colors.primary }}>
-                          +{item.bonusQuantity} bonus
-                        </Text>
-                      )}
-                    </View>
-                    <Text variant="bodyMedium" style={{ textAlign: 'right' }}>
-                      {item.quantity} × BDT {item.price.toFixed(2)}
-                      {item.discountPercentage > 0 && (
-                        <Text style={{ color: theme.colors.error }}>
-                          {' '}({item.discountPercentage}% off)
-                        </Text>
-                      )}
-                    </Text>
-                  </View>
-                ))}
-              </ScrollView>
-
-              <View style={styles.modalSection}>
-                <Text variant="bodyLarge" style={[styles.totalPrice, { textAlign: 'right' }]}>
-                  Total: BDT {calculateDraftTotal()}
-                </Text>
-              </View>
-
-              <View style={styles.modalButtons}>
-                <Button
-                  mode="outlined"
-                  onPress={() => setDraftModalVisible(false)}
-                  style={[styles.cancelButton, { borderRadius: 8, borderColor: theme.colors.primary }]}
-                  textColor={theme.colors.primary}
-                >
-                  Close
-                </Button>
-                <Button
-                  mode="contained"
-                  onPress={handleSubmitDraft}
-                  loading={submittingOrder}
-                  disabled={submittingOrder}
-                  style={[styles.confirmButton, { borderRadius: 8 }]}
-                  buttonColor={theme.colors.primary}
-                >
-                  Submit Order
-                </Button>
-              </View>
             </View>
-          </View>
-        </Modal>
+          ))}
+        </View>
+
+        <View style={styles.modalSection}>
+          <Text variant="bodyLarge" style={[styles.totalPrice, { textAlign: 'right' }]}>
+            Total: BDT {calculateDraftTotal()}
+          </Text>
+        </View>
+      </ScrollView>
+
+      <View style={[styles.modalButtons, { 
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        width: '100%'
+      }]}>
+        <Button
+          mode="outlined"
+          onPress={handleDeleteDraft}
+          loading={deletingOrder}
+          disabled={deletingOrder}
+          style={[styles.deleteButton, { 
+            borderRadius: 8,
+            borderColor: theme.colors.error,
+            flex: 1,
+            marginRight: 8
+          }]}
+          textColor={theme.colors.error}
+        >
+          Cancel Order
+        </Button>
+        <Button
+          mode="contained"
+          onPress={handleSubmitDraft}
+          loading={submittingOrder}
+          disabled={submittingOrder}
+          style={[styles.confirmButton, { 
+            borderRadius: 8,
+            flex: 1
+          }]}
+          buttonColor={theme.colors.primary}
+        >
+          Submit
+        </Button>
+      </View>
+    </View>
+  </View>
+</Modal>
       </SafeAreaView>
     </PaperProvider>
   );
@@ -859,10 +923,12 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     alignItems: "center",
+    padding: 16,
   },
   modalContainer: {
-    width: "90%",
+    width: "100%",
     padding: 24,
+    maxWidth: 500,
   },
   modalTitle: {
     marginBottom: 16,
@@ -900,15 +966,18 @@ const styles = StyleSheet.create({
   },
   modalButtons: {
     flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 8,
+    justifyContent: "space-between",
     marginTop: 16,
+    width: '100%',
   },
   confirmButton: {
-    minWidth: 120,
+    minWidth: 100,
   },
   cancelButton: {
-    minWidth: 120,
+    minWidth: 100,
+  },
+  deleteButton: {
+    minWidth: 100,
   },
   rowInputContainer: {
     flexDirection: 'row',
@@ -924,7 +993,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   draftItemsContainer: {
-    maxHeight: 300,
     marginBottom: 16,
   },
   draftItem: {
@@ -946,15 +1014,22 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
   },
-  paymentMethodSelected: {
-    backgroundColor: '#6200ee',
-  },
   paymentMethodDisplay: {
     marginBottom: 16,
     paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
+  modalHeader: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: 16,
+},
+closeButton: {
+  padding: 8,
+  marginLeft: 8,
+},
 });
 
 export default ProductStockScreen;

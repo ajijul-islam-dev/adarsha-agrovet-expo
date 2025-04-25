@@ -214,7 +214,7 @@ const OrdersTab = ({ officerData, theme, loading }) => {
                         {formatDateTime(order.createdAt)}
                       </DataTable.Cell>
                       <DataTable.Cell>
-                        {order.store?.storeName || 'N/A'}
+                        {order.storeName || 'N/A'}
                       </DataTable.Cell>
                       <DataTable.Cell>
                         <View style={[
@@ -307,7 +307,7 @@ const PaymentsTab = ({ officerData, theme, loading }) => {
                     {formatDateTime(payment.date || payment.createdAt)}
                   </DataTable.Cell>
                   <DataTable.Cell>
-                    {payment.store?.storeName || 'N/A'}
+                    {payment.storeName || 'N/A'}
                   </DataTable.Cell>
                   <DataTable.Cell>
                     {payment.paymentMethod || 'cash'}
@@ -404,14 +404,14 @@ const DuesTab = ({ officerData, theme, loading }) => {
           left={() => <MaterialCommunityIcons name="receipt" size={24} color={theme.colors.primary} />}
         />
         <Card.Content>
-          {officerData?.histories?.combinedDues?.length > 0 ? (
+          {officerData?.histories?.dues?.length > 0 ? (
             <DataTable>
               <DataTable.Header>
                 <DataTable.Title>Date</DataTable.Title>
                 <DataTable.Title>Description</DataTable.Title>
                 <DataTable.Title numeric>Amount</DataTable.Title>
               </DataTable.Header>
-              {officerData.histories.combinedDues.map(renderDueItem)}
+              {officerData.histories.dues.map(renderDueItem)}
               <DataTable.Row style={{ backgroundColor: theme.colors.surfaceVariant }}>
                 <DataTable.Cell>
                   <Text style={{ fontWeight: 'bold' }}>Total</Text>
@@ -480,7 +480,7 @@ const StoresTab = ({ officerData, theme, loading }) => {
                         {store.proprietorName}
                       </DataTable.Cell>
                       <DataTable.Cell numeric>
-                        {formatCurrency(store.totalFinalDues || 0)}
+                        {formatCurrency(store.currentDues|| 0)}
                       </DataTable.Cell>
                     </DataTable.Row>
                   </TouchableOpacity>
@@ -515,6 +515,7 @@ const OfficerDetailsScreen = () => {
     handleGetOfficerById,
     showMessage
   } = useContext(ServicesProvider);
+  console.log('&&&&&&&&&&',currentOfficer?.histories?.dues)
   const [refreshing, setRefreshing] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
   const [tabIndex, setTabIndex] = useState(0);

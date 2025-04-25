@@ -991,13 +991,37 @@ const handleGetOrderHistory = async (orderId) => {
   }
 };
 
+
+const handleDeleteOrder = async (orderId) => {
+  setLoading(true);
+  try {
+    const res = await axiosSecure.delete(`/api/orders/${orderId}`);
+    if (res.data.success) {
+      showMessage(res.data.message, 'success');
+      
+      // Update local state
+      if (draftOrder?._id === orderId) {
+        setDraftOrder(null);
+      }
+      setOrders(prev => prev.filter(o => o._id !== orderId));
+      
+      return { success: true };
+    }
+    throw new Error(res.data.message || 'Failed to delete order');
+  } catch (error) {
+    showMessage(getErrorMessage(error), 'error');
+    return { success: false };
+  } finally {
+    setLoading(false);
+  }
+};
+
 useEffect(()=>{
   handleGetAllProducts();
   handleGetAllOfficers();
   handleGetAllStores();
   handleGetMyStores();
   handleGetAllOrders();
-  handleGetOfficerById(user?._id);
 },[]);
 
 
@@ -1047,7 +1071,8 @@ useEffect(()=>{
     currentOfficer,
     
     handleGetAllUsers,
-    handleUpdateUserStatus
+    handleUpdateUserStatus,
+    handleDeleteOrder,
   };
 
   return (

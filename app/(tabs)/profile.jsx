@@ -111,7 +111,7 @@ const Profile = () => {
         {/* Footer with Copyright and Social Media */}
         <View style={[styles.footer, { borderTopColor: colors.outline }]}>
           <Text style={[styles.copyrightText, { color: colors.outline }]}>
-            © 2023 Developed by Ajijul Islam
+            © 2025 Developed by Ajijul Islam
           </Text>
           <View style={styles.socialIconsContainer}>
             <TouchableOpacity style={styles.socialIcon}>

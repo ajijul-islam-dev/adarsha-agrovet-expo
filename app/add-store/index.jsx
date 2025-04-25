@@ -42,7 +42,7 @@ const AddStoreScreen = () => {
     });
     
     if (result) {
-      router.push('/stores');
+      router.push('/my-stores');
     }
   };
 

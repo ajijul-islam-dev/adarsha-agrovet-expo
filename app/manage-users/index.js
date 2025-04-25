@@ -59,6 +59,7 @@ const UserManagementScreen = () => {
       </View>
       
       <View style={styles.detailRow}>
+        <Text style={styles.area}>{item.role}</Text>
         <Text style={styles.area}>{item.area}</Text>
       </View>
       

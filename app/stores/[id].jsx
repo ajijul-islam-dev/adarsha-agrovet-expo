@@ -137,9 +137,9 @@ const OverviewTab = ({ currentStore, id, theme, onRefresh, refreshing }) => {
                   Last Due
                 </Text>
                 <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]}>
-                 ({formatCurrency(currentStore?.dueHistory[currentStore?.dueHistory.length -1]?.amount || 0)})
+                 ({formatCurrency(currentStore?.dueHistory[0]?.amount || 0)})
                  {' '}
-          {new Date(currentStore.dueHistory.at(-1)?.createdAt).toLocaleDateString('en-GB')}
+          { currentStore.dueHistory.at(-1)?.createdAt && new Date(currentStore.dueHistory.at(-1)?.createdAt).toLocaleDateString('en-GB')}
                 </Text>
               </View>
               <View style={styles.summaryItem}>
@@ -147,9 +147,9 @@ const OverviewTab = ({ currentStore, id, theme, onRefresh, refreshing }) => {
                   Last Payment
                 </Text>
                 <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]}>
-                 ({formatCurrency(currentStore?.paymentHistory[currentStore.paymentHistory.length -1]?.amount || 0)})
+                 ({formatCurrency(currentStore?.paymentHistory[0]?.amount || 0)})
                  {' '}
-          {new Date(currentStore.paymentHistory.at(-1)?.createdAt).toLocaleDateString('en-GB')}
+          { currentStore.paymentHistory.at(-1)?.createdAt && new Date(currentStore.paymentHistory.at(-1)?.createdAt).toLocaleDateString('en-GB')}
                 </Text>
               </View>
             </View>
@@ -1101,7 +1101,7 @@ const StoreDetailsScreen = () => {
     handleAddStoreDue,
     showMessage
   } = useContext(ServicesProvider);
-
+console.log(currentStore)
   const [refreshing, setRefreshing] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
   const [tabIndex, setTabIndex] = useState(0);
