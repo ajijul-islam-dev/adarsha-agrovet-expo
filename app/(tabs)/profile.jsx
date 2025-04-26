@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView } from 'react-native';
+import * as Linking from 'expo-linking';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link } from 'expo-router';
 import { useContext } from 'react';
@@ -114,18 +115,16 @@ const Profile = () => {
             © 2025 Developed by Ajijul Islam
           </Text>
           <View style={styles.socialIconsContainer}>
-            <TouchableOpacity style={styles.socialIcon}>
-              <FontAwesome name="twitter" size={24} color={colors.primary} />
+            <TouchableOpacity onPress={()=>Linking.openURL('https://www.facebook.com/ajijul.islam.dev')} style={styles.socialIcon}>
+              <FontAwesome name="facebook" size={24} color={'blue'} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.socialIcon}>
+            <TouchableOpacity onPress={()=>Linking.openURL('https://github.com/ajijul-islam-dev')} style={styles.socialIcon}>
               <FontAwesome name="github" size={24} color={colors.onSurface} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.socialIcon}>
-              <FontAwesome name="linkedin" size={24} color={colors.primary} />
+            <TouchableOpacity onPress={()=>Linking.openURL('https://www.linkedin.com/in/ajijul-islam-dev')} style={styles.socialIcon}>
+              <FontAwesome name="linkedin" size={24} color={'blue'} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.socialIcon}>
-              <FontAwesome name="instagram" size={24} color={colors.primary} />
-            </TouchableOpacity>
+
           </View>
         </View>
       </ScrollView>

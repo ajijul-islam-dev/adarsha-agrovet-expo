@@ -177,7 +177,7 @@ const AuthProvider = ({ children }) => {
     Object.entries(filters).forEach(([key, value]) => {
       if (value) queryParams.append(key, value);
     });
-
+   
     const res = await axiosSecure.get(`/users?${queryParams.toString()}`);
     if (res.data.success) {
       return {

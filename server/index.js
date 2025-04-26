@@ -305,10 +305,8 @@ app.get('/users', verifyToken, async (req, res) => {
     if (role) query.role = role;
     if (status) query.status = status;
     if (area) query.area = area;
-
-    const users = await User.find(query)
-      .select('-password -__v')
-      .sort({ createdAt: -1 });
+    
+    const users = await User.find(query);
 
     res.json({
       success: true,

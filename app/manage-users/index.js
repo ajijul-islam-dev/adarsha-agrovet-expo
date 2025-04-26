@@ -13,7 +13,7 @@ const UserManagementScreen = () => {
   const [selectedAction, setSelectedAction] = useState('');
  const [visibleMenu,setVisibleMenu] = useState(null);
   const fetchUsers = async () => {
-    const query = { role: 'officer' }; // Only show officers by default
+    const query = { }; // Only show officers by default
     if (searchQuery) query.search = searchQuery;
     if (selectedArea !== 'All Areas') query.area = selectedArea;
     
