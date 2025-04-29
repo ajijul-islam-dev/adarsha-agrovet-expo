@@ -38,6 +38,12 @@ const orderSchema = new mongoose.Schema({
     enum: ['draft', 'pending', 'approved', 'rejected', 'fulfilled'],
     default: 'draft'
   },
+  paymentMethod: {
+    type: String,
+    enum: ['cash', 'credit'],
+    default: 'cash',
+    required: true
+  },
   statusHistory: [{
     status: String,
     changedAt: { type: Date, default: Date.now },

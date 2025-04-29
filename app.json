@@ -1,12 +1,12 @@
 {
   "expo": {
-    "name": "adarsha-agro",
+    "name": "Adarsha Agrovet Ltd",
     "slug": "adarsha-agro",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/adarsha.png",
-    "scheme": "myapp",
-    "userInterfaceStyle": "automatic",
+    "scheme": "adarsha",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "extra": {
       "API_URL": "http://localhost:3000"

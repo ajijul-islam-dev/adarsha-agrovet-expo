@@ -255,46 +255,52 @@ const ProductStockScreen = () => {
     }
   };
 
-  const renderItem = ({ item }) => (
-    <Card style={[styles.productCard, { borderRadius: 8 }]} mode="elevated">
-      <Card.Title
-        title={item.productName}
-        titleStyle={styles.title}
-        titleVariant="titleMedium"
-        right={() => (
-          <View style={[styles.stockBadge, { backgroundColor: theme.colors.surfaceVariant, borderRadius: 8 }]}>
-            <Text style={[styles.stockBadgeText, { color: theme.colors.primary }]}>
-              {item.stock} pcs
-            </Text>
-          </View>
-        )}
-      />
-      <Card.Content style={styles.cardContent}>
-        <View style={styles.productInfo}>
-          <Text style={[styles.price, { color: theme.colors.primary }]}>BDT {item.price}</Text>
-          <Text style={styles.packSize} numberOfLines={1} ellipsizeMode="tail">
-            {item.packSize} {item.unit}
+  // In your renderItem function, modify the buttons section like this:
+const renderItem = ({ item }) => (
+  <Card style={[styles.productCard, { borderRadius: 8 }]} mode="elevated">
+    <Card.Title
+      title={item.productName}
+      titleStyle={styles.title}
+      titleVariant="titleMedium"
+      right={() => (
+        <View style={[styles.stockBadge, { backgroundColor: theme.colors.surfaceVariant, borderRadius: 8 }]}>
+          <Text style={[styles.stockBadgeText, { color: theme.colors.primary }]}>
+            {item.stock} pcs
           </Text>
         </View>
-        <View style={{ marginLeft: 'auto', flexDirection: 'row', gap: 8 }}>
-          {storeId && (
-            <TouchableOpacity
-              onPress={() => openOrderModal(item)}
-              style={[styles.iconButton, { backgroundColor: theme.colors.primary, borderRadius: 8 }]}
-            >
-              <Icon name="cart-plus" size={20} color={theme.colors.onPrimary} />
-            </TouchableOpacity>
-          )}
+      )}
+    />
+    <Card.Content style={styles.cardContent}>
+      <View style={styles.productInfo}>
+        <Text style={[styles.price, { color: theme.colors.primary }]}>BDT {item.price}</Text>
+        <Text style={styles.packSize} numberOfLines={1} ellipsizeMode="tail">
+          {item.packSize} {item.unit}
+        </Text>
+      </View>
+      <View style={{ marginLeft: 'auto', flexDirection: 'row', gap: 8 }}>
+        {/* Show Order button only for officers */}
+        {storeId && user?.role === 'officer' && (
+          <TouchableOpacity
+            onPress={() => openOrderModal(item)}
+            style={[styles.iconButton, { backgroundColor: theme.colors.primary, borderRadius: 8 }]}
+          >
+            <Icon name="cart-plus" size={20} color={theme.colors.onPrimary} />
+          </TouchableOpacity>
+        )}
+        
+        {/* Show Edit button only for stock managers */}
+        {user?.role === 'stock-manager' && (
           <TouchableOpacity
             onPress={() => openUpdateModal(item)}
             style={[styles.iconButton, { borderWidth: 1, borderColor: theme.colors.primary, borderRadius: 8 }]}
           >
             <Icon name="pencil" size={20} color={theme.colors.primary} />
           </TouchableOpacity>
-        </View>
-      </Card.Content>
-    </Card>
-  );
+        )}
+      </View>
+    </Card.Content>
+  </Card>
+);
 
   return (
     <PaperProvider>

@@ -78,7 +78,7 @@ const AllStoresScreen = () => {
                 <TextInput.Icon
                   icon="close"
                   color={theme.colors.onSurface}
-                  onPress={() => setSearchQuery("")}
+                  ress={() => setSearchQuery("")}
                 />
               ) : null
             }
@@ -91,7 +91,7 @@ const AllStoresScreen = () => {
             anchor={
               <Button
                 ref={menuAnchorRef}
-                onPress={() => setFilterVisible(true)}
+                ress={() => setFilterVisible(true)}
                 mode="outlined"
                 style={[styles.sortButton, { borderColor: theme.colors.primary }]}
                 icon="filter"
@@ -106,7 +106,7 @@ const AllStoresScreen = () => {
               <Menu.Item 
                 key={area}
                 leadingIcon={filterOption === area ? "check" : null}
-                onPress={() => { 
+                ress={() => { 
                   setFilterOption(area); 
                   setFilterVisible(false); 
                 }} 

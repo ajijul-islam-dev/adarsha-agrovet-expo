@@ -375,10 +375,10 @@ app.patch('/users/:id/status', verifyToken, async (req, res) => {
 
 // Create a Product
 app.post('/products', verifyToken, async (req, res) => {
-  if (req.user.role !== 'admin' && req.user.role !== 'officer') {
+  if (req.user.role !== 'stock-manager') {
     return res.status(403).json({
       success: false,
-      message: 'Admin or officer privileges required'
+      message: 'stock manager privileges required'
     });
   }
 
@@ -2346,63 +2346,71 @@ app.get('/stores/my-stores', verifyToken, async (req, res) => {
 
 // Create or update draft order
 app.post('/api/orders/draft', verifyToken, async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  
   try {
-    const { storeId, product, quantity, bonusQuantity, discountPercentage, notes } = req.body;
+    const { 
+      storeId, 
+      product, 
+      quantity, 
+      bonusQuantity = 0, 
+      discountPercentage = 0, 
+      paymentMethod = 'cash',
+      notes 
+    } = req.body;
 
-    // Validate required fields
+    // Validation
     if (!storeId || !product || !quantity) {
+      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: 'Store ID, product, and quantity are required'
       });
     }
 
-    // Check if store exists
-    const store = await Store.findById(storeId);
-    if (!store) {
-      return res.status(404).json({
+    if (!['cash', 'credit'].includes(paymentMethod)) {
+      await session.abortTransaction();
+      return res.status(400).json({
         success: false,
-        message: 'Store not found'
+        message: 'Invalid payment method'
       });
     }
 
-    // Check if product exists
-    const productExists = await Product.findById(product.id);
+    // Check product exists
+    const productExists = await Product.findById(product.id).session(session);
     if (!productExists) {
+      await session.abortTransaction();
       return res.status(404).json({
         success: false,
         message: 'Product not found'
       });
     }
 
-    // Stock validation - only addition
-    const totalNeeded = quantity + (bonusQuantity || 0);
-    if (productExists.stock < totalNeeded) {
-      return res.status(400).json({
-        success: false,
-        message: `Insufficient stock for ${productExists.productName}. Available: ${productExists.stock}, Needed: ${totalNeeded}`,
-        productId: product.id,
-        availableStock: productExists.stock,
-        requiredStock: totalNeeded
-      });
-    }
-
-    // Rest of original implementation remains unchanged
+    // Find existing draft or create new
     let order = await Order.findOne({
       store: storeId,
       status: 'draft',
       createdBy: req.user.id
-    });
+    }).session(session);
 
     if (order) {
+      // Update existing order
       const existingProductIndex = order.products.findIndex(
         p => p.product.toString() === product.id
       );
 
       if (existingProductIndex >= 0) {
-        order.products[existingProductIndex].quantity = quantity;
-        order.products[existingProductIndex].bonusQuantity = bonusQuantity || 0;
-        order.products[existingProductIndex].discountPercentage = discountPercentage || 0;
+        order.products[existingProductIndex] = {
+          product: product.id,
+          name: product.name,
+          price: product.price,
+          packSize: product.packSize,
+          unit: product.unit,
+          quantity,
+          bonusQuantity,
+          discountPercentage
+        };
       } else {
         order.products.push({
           product: product.id,
@@ -2411,14 +2419,15 @@ app.post('/api/orders/draft', verifyToken, async (req, res) => {
           packSize: product.packSize,
           unit: product.unit,
           quantity,
-          bonusQuantity: bonusQuantity || 0,
-          discountPercentage: discountPercentage || 0
+          bonusQuantity,
+          discountPercentage
         });
       }
 
+      order.paymentMethod = paymentMethod;
       order.notes = notes || order.notes;
-      order.updatedAt = new Date();
     } else {
+      // Create new order
       order = new Order({
         store: storeId,
         products: [{
@@ -2428,37 +2437,55 @@ app.post('/api/orders/draft', verifyToken, async (req, res) => {
           packSize: product.packSize,
           unit: product.unit,
           quantity,
-          bonusQuantity: bonusQuantity || 0,
-          discountPercentage: discountPercentage || 0
+          bonusQuantity,
+          discountPercentage
         }],
         status: 'draft',
-        notes: notes || `Order for ${store.storeName}`,
+        paymentMethod,
+        notes: notes || `Order for ${storeId}`,
         createdBy: req.user.id,
         marketingOfficer: req.user.id
       });
     }
 
-    await order.save();
+    await order.save({ session });
+    await session.commitTransaction();
 
-    res.status(order.isNew ? 201 : 200).json({
+    const populatedOrder = await Order.findById(order._id)
+      .populate('products.product')
+      .populate('store')
+      .populate('createdBy');
+
+    res.status(200).json({
       success: true,
       message: order.isNew ? 'Draft order created' : 'Draft order updated',
-      order
+      order: populatedOrder
     });
 
   } catch (error) {
-    console.error('Draft order error:', error);
+    await session.abortTransaction();
+    console.error('Order save error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to save draft order',
-      error: error.message
+      message: 'Failed to save order',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
+  } finally {
+    session.endSession();
   }
 });
 // Update draft order
+
 app.patch('/api/orders/:id', verifyToken, async (req, res) => {
   try {
-    const { product, quantity, bonusQuantity, discountPercentage, notes } = req.body;
+    const { 
+      product, 
+      quantity, 
+      bonusQuantity = 0, 
+      discountPercentage = 0, 
+      paymentMethod,
+      notes 
+    } = req.body;
 
     // Find the existing order
     const order = await Order.findById(req.params.id);
@@ -2494,27 +2521,34 @@ app.patch('/api/orders/:id', verifyToken, async (req, res) => {
       });
     }
 
-    // Stock validation - only addition
-    const totalNeeded = quantity + (bonusQuantity || 0);
+    // Stock validation
+    const totalNeeded = quantity + bonusQuantity;
     if (productExists.stock < totalNeeded) {
       return res.status(400).json({
         success: false,
-        message: `Insufficient stock for ${productExists.productName}. Available: ${productExists.stock}, Needed: ${totalNeeded}`,
+        message: `Insufficient stock for ${productExists.productName}`,
         productId: product.id,
         availableStock: productExists.stock,
         requiredStock: totalNeeded
       });
     }
 
-    // Rest of original implementation remains unchanged
+    // Update order
     const existingProductIndex = order.products.findIndex(
       p => p.product.toString() === product.id
     );
 
     if (existingProductIndex >= 0) {
-      order.products[existingProductIndex].quantity = quantity;
-      order.products[existingProductIndex].bonusQuantity = bonusQuantity || 0;
-      order.products[existingProductIndex].discountPercentage = discountPercentage || 0;
+      order.products[existingProductIndex] = {
+        product: product.id,
+        name: product.name,
+        price: product.price,
+        packSize: product.packSize,
+        unit: product.unit,
+        quantity,
+        bonusQuantity,
+        discountPercentage
+      };
     } else {
       order.products.push({
         product: product.id,
@@ -2523,9 +2557,14 @@ app.patch('/api/orders/:id', verifyToken, async (req, res) => {
         packSize: product.packSize,
         unit: product.unit,
         quantity,
-        bonusQuantity: bonusQuantity || 0,
-        discountPercentage: discountPercentage || 0
+        bonusQuantity,
+        discountPercentage
       });
+    }
+
+    // Update payment method if provided
+    if (paymentMethod) {
+      order.paymentMethod = paymentMethod;
     }
 
     if (notes) {
@@ -2552,41 +2591,85 @@ app.patch('/api/orders/:id', verifyToken, async (req, res) => {
 });
 // Submit draft order
 app.post('/api/orders/:id/submit', verifyToken, async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
-    const order = await Order.findById(req.params.id);
-    if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found' });
-    }
+    const { paymentMethod } = req.body;
+    const orderId = req.params.id;
 
-    if (order.status !== 'draft') {
-      return res.status(400).json({ success: false, message: 'Only draft orders can be submitted' });
-    }
-
-    // 1. Validate stock before submission
-    const stockCheckResults = await Promise.all(order.products.map(async (item) => {
-      const product = await Product.findById(item.product);
-      const total = item.quantity + (item.bonusQuantity || 0);
-      if (!product) return { valid: false, reason: 'Product not found', id: item.product };
-      if (product.stock < total) return { valid: false, reason: 'Insufficient stock', id: item.product, available: product.stock };
-      return { valid: true };
-    }));
-
-    const failed = stockCheckResults.find(r => !r.valid);
-    if (failed) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `Stock error: ${failed.reason}`,
-        productId: failed.id,
-        availableStock: failed.available 
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid order ID'
       });
     }
 
-    // 2. Set status to pending and save (let pre('save') handle stock update)
+    if (paymentMethod && !['cash', 'credit'].includes(paymentMethod)) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid payment method'
+      });
+    }
+
+    const order = await Order.findById(orderId).session(session);
+    if (!order) {
+      await session.abortTransaction();
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    if (order.status !== 'draft') {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: 'Only draft orders can be submitted'
+      });
+    }
+
+    // Update payment method if provided
+    if (paymentMethod) {
+      order.paymentMethod = paymentMethod;
+    }
+
+    // Validate stock before submission
+    for (const item of order.products) {
+      const product = await Product.findById(item.product).session(session);
+      const total = item.quantity + (item.bonusQuantity || 0);
+      
+      if (!product) {
+        await session.abortTransaction();
+        return res.status(404).json({
+          success: false,
+          message: `Product ${item.product} not found`,
+          productId: item.product
+        });
+      }
+
+      if (product.stock < total) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient stock for ${product.productName}`,
+          productId: item.product,
+          availableStock: product.stock,
+          requiredStock: total
+        });
+      }
+    }
+
+  
+    // Update order status
     order.status = 'pending';
     order.submittedAt = new Date();
     order._updatedBy = req.user.id;
 
-    await order.save();
+    await order.save({ session });
+    await session.commitTransaction();
 
     res.json({
       success: true,
@@ -2594,13 +2677,16 @@ app.post('/api/orders/:id/submit', verifyToken, async (req, res) => {
       order
     });
 
-  } catch (err) {
-    console.error('Submit error:', err);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to submit order', 
-      error: err.message 
+  } catch (error) {
+    await session.abortTransaction();
+    console.error('Submit error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to submit order',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
+  } finally {
+    session.endSession();
   }
 });
 
@@ -3142,10 +3228,10 @@ app.patch('/api/orders/:id/approve', verifyToken, async (req, res) => {
 
 
 
-
 /**
  * @api {patch} /api/orders/:id/reject Reject Order
  * @apiPermission admin
+ * api/orders/:id/reject
  */
 app.patch('/api/orders/:id/reject', verifyToken, async (req, res) => {
   const { reason } = req.body;

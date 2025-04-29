@@ -49,7 +49,7 @@ const MyStoresScreen = () => {
           {searchQuery ? "Try a different search term" : "You don't have any stores yet"}
         </Text>
         {!searchQuery && (
-          <Link href="/stores/add" asChild>
+          <Link href="/add-store" asChild>
             <Button 
               mode="contained" 
               style={{ marginTop: 16 }}

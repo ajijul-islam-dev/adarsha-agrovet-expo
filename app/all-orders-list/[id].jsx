@@ -1,5 +1,5 @@
 import React, { useState, useContext, useEffect, useRef } from 'react';
-import { ScrollView, StyleSheet, View, Animated, Dimensions } from 'react-native';
+import { ScrollView, StyleSheet, View, Animated } from 'react-native';
 import {
   Appbar,
   Card,
@@ -15,7 +15,8 @@ import {
   Portal,
   Modal,
   Dialog,
-  Paragraph
+  Paragraph,
+  IconButton
 } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -28,7 +29,11 @@ const OrderDetailsScreen = () => {
   const [loading, setLoading] = useState(true);
   const [order, setOrder] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
-  const [confirmDialog, setConfirmDialog] = useState({ visible: false, type: null });
+  const [confirmDialog, setConfirmDialog] = useState({ 
+    visible: false, 
+    type: null,
+    loading: false 
+  });
   const [initialLoad, setInitialLoad] = useState(true);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -37,7 +42,10 @@ const OrderDetailsScreen = () => {
     handleApproveOrder,
     handleRejectOrder,
     handleUpdateOrderStatus,
-    user
+    handleCancelOrder,
+    handleSubmitDraftOrder,
+    user,
+    showMessage
   } = useContext(ServicesProvider);
 
   useEffect(() => {
@@ -55,6 +63,7 @@ const OrderDetailsScreen = () => {
         }
       } catch (error) {
         console.error('Failed to fetch order:', error);
+        showMessage('Failed to load order details', 'error');
       } finally {
         setLoading(false);
         setInitialLoad(false);
@@ -78,45 +87,51 @@ const OrderDetailsScreen = () => {
     return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const handleApprove = async () => {
+  const handleAction = async (action) => {
     try {
-      setLoading(true);
-      const result = await handleApproveOrder(id);
-      if (result.success) {
-        setOrder(prev => ({ ...prev, status: 'approved' }));
+      setConfirmDialog(prev => ({ ...prev, loading: true }));
+      
+      let result;
+      switch (action) {
+        case 'approve':
+          result = await handleApproveOrder(id);
+          break;
+        case 'fulfill':
+          result = await handleUpdateOrderStatus(id, 'fulfilled');
+          break;
+        case 'reject':
+          result = await handleUpdateOrderStatus(id, 'rejected');
+          break;
+        case 'cancel':
+          result = await handleCancelOrder(id);
+          break;
+        case 'submit':
+          result = await handleSubmitDraftOrder();
+          if (result.success) {
+            showMessage('Draft submitted successfully!', 'success');
+          }
+          break;
+        default:
+          break;
       }
-    } catch (error) {
-      console.error('Approval failed:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const handleFulfill = async () => {
-    try {
-      setLoading(true);
-      const result = await handleUpdateOrderStatus(id, 'fulfilled');
-      if (result.success) {
-        setOrder(prev => ({ ...prev, status: 'fulfilled' }));
+      if (result?.success) {
+        setOrder(prev => ({ 
+          ...prev, 
+          status: action === 'cancel' ? 'cancelled' : 
+                 action === 'submit' ? 'pending' : 
+                 action 
+        }));
+        if (action !== 'submit') {
+          router.back();
+        }
       }
     } catch (error) {
-      console.error('Fulfillment failed:', error);
+      console.error(`${action} failed:`, error);
+      showMessage(`Failed to ${action} order`, 'error');
     } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleReject = async () => {
-    try {
-      setLoading(true);
-      const result = await handleUpdateOrderStatus(id, 'rejected');
-      if (result.success) {
-        setOrder(prev => ({ ...prev, status: 'rejected' }));
-      }
-    } catch (error) {
-      console.error('Rejection failed:', error);
-    } finally {
-      setLoading(false);
+      setConfirmDialog({ visible: false, type: null, loading: false });
+      setModalVisible(false);
     }
   };
 
@@ -161,23 +176,51 @@ const OrderDetailsScreen = () => {
     );
   }
 
-  const showActionMenu = () => {
-    return (order.status === 'pending' && user?.role === 'admin') || 
-           (order.status === 'approved' && user?.role === 'stock-manager');
+  const isOrderOwner = false; // order.createdBy?._id === user?._id;
+  //alert(isOrderOwner)
+  const canManageOrder = (
+    (order.status === 'pending' && user?.role === 'admin') ||
+    (order.status === 'approved' && user?.role === 'stock-manager') ||
+    (user?.role === 'officer' && isOrderOwner && 
+      (order.status === 'draft' || order.status === 'pending' || order.status === 'approved'))
+  );
+
+  const getStatusColor = () => {
+    switch (order.status) {
+      case 'approved': return theme.colors.primary;
+      case 'rejected': return theme.colors.error;
+      case 'fulfilled': return theme.colors.secondary;
+      case 'draft': return theme.colors.onSurfaceVariant;
+      default: return theme.colors.onSurfaceVariant;
+    }
   };
-  
+
+  const getStatusBackgroundColor = () => {
+    switch (order.status) {
+      case 'approved': return theme.colors.primaryContainer;
+      case 'rejected': return theme.colors.errorContainer;
+      case 'fulfilled': return theme.colors.secondaryContainer;
+      case 'draft': return theme.colors.surfaceVariant;
+      default: return theme.colors.surfaceVariant;
+    }
+  };
+
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
       <Appbar.Header>
         <Appbar.BackAction onPress={() => router.back()} />
         <Appbar.Content title="Order Details" />
-        {showActionMenu() && (
+        {canManageOrder && (
           <Menu
             visible={menuVisible}
             onDismiss={() => setMenuVisible(false)}
             anchor={<Appbar.Action icon="dots-vertical" onPress={() => setMenuVisible(true)} />}
           >
-            <Menu.Item onPress={() => setModalVisible(true)} title="Manage Order" leadingIcon="cog" />
+            <Menu.Item 
+              onPress={() => setModalVisible(true)} 
+              title="Order Actions" 
+              leadingIcon="cog" 
+            />
           </Menu>
         )}
       </Appbar.Header>
@@ -186,48 +229,31 @@ const OrderDetailsScreen = () => {
         <View style={styles.statusContainer}>
           <ProgressBar
             progress={
+              order.status === 'draft' ? 0.1 :
               order.status === 'pending' ? 0.3 :
               order.status === 'approved' ? 0.6 :
               order.status === 'fulfilled' ? 1 : 0
             }
-            color={
-              order.status === 'approved' ? theme.colors.primary :
-              order.status === 'rejected' ? theme.colors.error :
-              order.status === 'fulfilled' ? theme.colors.secondary :
-              theme.colors.onSurfaceVariant
-            }
+            color={getStatusColor()}
             style={styles.progressBar}
           />
           <Chip
             style={[
               styles.statusChip,
-              {
-                backgroundColor:
-                  order.status === 'approved' ? theme.colors.primaryContainer :
-                  order.status === 'rejected' ? theme.colors.errorContainer :
-                  order.status === 'fulfilled' ? theme.colors.secondaryContainer :
-                  theme.colors.surfaceVariant
-              }
+              { backgroundColor: getStatusBackgroundColor() }
             ]}
-            textStyle={{
-              color:
-                order.status === 'approved' ? theme.colors.primary :
-                order.status === 'rejected' ? theme.colors.error :
-                order.status === 'fulfilled' ? theme.colors.secondary :
-                theme.colors.onSurfaceVariant
-            }}
+            textStyle={{ color: getStatusColor() }}
           >
             {order.status.toUpperCase()}
           </Chip>
         </View>
 
-        {/* Order Summary */}
         <Card style={styles.card}>
           <Card.Content>
             <View style={styles.row}>
               <Text variant="titleMedium">{order.createdBy?.name || 'N/A'}</Text>
               <Text style={{ color: theme.colors.onSurfaceVariant }}>
-                {formatDate(order.submittedAt)} • {formatTime(order.submittedAt)}
+                {order.status === 'draft' ? 'Draft' : formatDate(order.submittedAt)} • {order.status !== 'draft' && formatTime(order.submittedAt)}
               </Text>
             </View>
             <Divider style={[styles.divider, { backgroundColor: theme.colors.outline }]} />
@@ -235,14 +261,18 @@ const OrderDetailsScreen = () => {
               <Text>Total Amount:</Text>
               <Text>৳{order.orderTotal?.toLocaleString()}</Text>
             </View>
-            <View style={styles.row}>
-              <Text>Discount:</Text>
-              <Text style={{ color: theme.colors.error }}>-৳{order?.totalDiscount?.toLocaleString()} </Text>
-            </View>
-            <View style={[styles.row, { marginTop: 8 }]}>
-              <Text variant="titleSmall">Subtotal:</Text>
-              <Text variant="titleSmall">৳{Number(order.orderTotal) - Number( order?.totalDiscount)}</Text>
-            </View>
+            {order.status !== 'draft' && (
+              <>
+                <View style={styles.row}>
+                  <Text>Discount:</Text>
+                  <Text style={{ color: theme.colors.error }}>-৳{order?.totalDiscount?.toLocaleString()} </Text>
+                </View>
+                <View style={[styles.row, { marginTop: 8 }]}>
+                  <Text variant="titleSmall">Subtotal:</Text>
+                  <Text variant="titleSmall">৳{(Number(order.orderTotal) - Number(order?.totalDiscount || 0)).toLocaleString()}</Text>
+                </View>
+              </>
+            )}
             <View style={[styles.row, { marginTop: 8 }]}>
               <MaterialIcons name="payment" size={20} color={theme.colors.primary} />
               <Text style={{ marginLeft: 8 }}>Paid via {order.paymentMethod || 'cash'}</Text>
@@ -250,7 +280,6 @@ const OrderDetailsScreen = () => {
           </Card.Content>
         </Card>
 
-        {/* Products */}
         <Card style={styles.card}>
           <Card.Content>
             <Text variant="titleMedium">Products ({order.products?.length || 0})</Text>
@@ -274,6 +303,7 @@ const OrderDetailsScreen = () => {
                     </Text>
                   </View>
                   <Text variant="bodyLarge" style={styles.productTotal}>
+                    ৳{(product.price * product.quantity).toLocaleString()}
                   </Text>
                 </View>
                 {index < order.products.length - 1 && (
@@ -284,29 +314,29 @@ const OrderDetailsScreen = () => {
           </Card.Content>
         </Card>
 
-        {/* Store Info */}
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text variant="titleMedium">Store Information</Text>
-            <Divider style={[styles.divider, { backgroundColor: theme.colors.outline }]} />
-            <View style={styles.infoRow}>
-              <MaterialIcons name="store" size={20} color={theme.colors.primary} />
-              <View style={styles.infoTextContainer}>
-                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>Store Name</Text>
-                <Text>{order.store?.storeName || 'N/A'}</Text>
+        {order.status !== 'draft' && (
+          <Card style={styles.card}>
+            <Card.Content>
+              <Text variant="titleMedium">Store Information</Text>
+              <Divider style={[styles.divider, { backgroundColor: theme.colors.outline }]} />
+              <View style={styles.infoRow}>
+                <MaterialIcons name="store" size={20} color={theme.colors.primary} />
+                <View style={styles.infoTextContainer}>
+                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>Store Name</Text>
+                  <Text>{order.store?.storeName || 'N/A'}</Text>
+                </View>
               </View>
-            </View>
-            <View style={styles.infoRow}>
-              <MaterialIcons name="person" size={20} color={theme.colors.primary} />
-              <View style={styles.infoTextContainer}>
-                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>Proprietor</Text>
-                <Text>{order.store?.proprietorName || 'N/A'}</Text>
+              <View style={styles.infoRow}>
+                <MaterialIcons name="person" size={20} color={theme.colors.primary} />
+                <View style={styles.infoTextContainer}>
+                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>Proprietor</Text>
+                  <Text>{order.store?.proprietorName || 'N/A'}</Text>
+                </View>
               </View>
-            </View>
-          </Card.Content>
-        </Card>
+            </Card.Content>
+          </Card>
+        )}
 
-        {/* Additional Info */}
         <Card style={styles.card}>
           <Card.Content>
             <Text variant="titleMedium">Additional Information</Text>
@@ -329,82 +359,146 @@ const OrderDetailsScreen = () => {
         </Card>
       </ScrollView>
 
-      {/* FAB & Modals */}
       <Portal>
-        {showActionMenu() && (
+        {canManageOrder && (
           <FAB
             icon="cog"
-            label="Manage Order"
+            label="Order Actions"
             onPress={() => setModalVisible(true)}
             style={{...styles.fab, backgroundColor: theme.colors.primary}}
             color="white"
           />
         )}
 
-        <Modal visible={modalVisible} onDismiss={() => setModalVisible(false)} contentContainerStyle={styles.modal}>
-          <Text variant="titleMedium" style={{ marginBottom: 16 }}>Order Actions</Text>
+        <Modal 
+          visible={modalVisible} 
+          onDismiss={() => setModalVisible(false)} 
+          contentContainerStyle={[
+            styles.modal,
+            { backgroundColor: theme.colors.background }
+          ]}
+        >
+          <View style={styles.modalHeader}>
+            <Text variant="titleMedium" style={styles.modalTitle}>Order Actions</Text>
+            <IconButton 
+              icon="close" 
+              size={20} 
+              onPress={() => setModalVisible(false)} 
+            />
+          </View>
           
-          {user?.role === 'admin' && order.status === 'pending' ? (
-            <>
-              <Button
-                icon="check"
-                mode="contained"
-                onPress={() => setConfirmDialog({ visible: true, type: 'approve' })}
-                style={{ marginBottom: 12 }}
-              >
-                Approve Order
-              </Button>
-              <Button
-                icon="close"
-                mode="outlined"
-                textColor={theme.colors.error}
-                onPress={() => setConfirmDialog({ visible: true, type: 'reject' })}
-              >
-                Reject Order
-              </Button>
-            </>
-          ) : user?.role === 'stock-manager' && order.status === 'approved' ? (
-            <>
-              <Button
-                icon="check"
-                mode="contained"
-                onPress={() => setConfirmDialog({ visible: true, type: 'fulfill' })}
-                style={{ marginBottom: 12 }}
-              >
-                Fulfill Order
-              </Button>
-              <Button
-                icon="close"
-                mode="outlined"
-                textColor={theme.colors.error}
-                onPress={() => setConfirmDialog({ visible: true, type: 'reject' })}
-              >
-                Reject Order
-              </Button>
-            </>
-          ) : null}
+          <View style={styles.modalContent}>
+            {user?.role === 'admin' && order.status === 'pending' && (
+              <>
+                <Button
+                  icon="check"
+                  mode="contained"
+                  onPress={() => setConfirmDialog({ visible: true, type: 'approve', loading: false })}
+                  style={styles.actionButton}
+                  contentStyle={styles.buttonContent}
+                >
+                  Approve Order
+                </Button>
+                <Button
+                  icon="close"
+                  mode="outlined"
+                  textColor={theme.colors.error}
+                  onPress={() => setConfirmDialog({ visible: true, type: 'reject', loading: false })}
+                  style={styles.actionButton}
+                  contentStyle={styles.buttonContent}
+                >
+                  Reject Order
+                </Button>
+              </>
+            )}
+
+            {user?.role === 'stock-manager' && order.status === 'approved' && (
+              <>
+                <Button
+                  icon="check"
+                  mode="contained"
+                  onPress={() => setConfirmDialog({ visible: true, type: 'fulfill', loading: false })}
+                  style={styles.actionButton}
+                  contentStyle={styles.buttonContent}
+                >
+                  Fulfill Order
+                </Button>
+                <Button
+                  icon="close"
+                  mode="outlined"
+                  textColor={theme.colors.error}
+                  onPress={() => setConfirmDialog({ visible: true, type: 'reject', loading: false })}
+                  style={styles.actionButton}
+                  contentStyle={styles.buttonContent}
+                >
+                  Reject Order
+                </Button>
+              </>
+            )}
+
+            {user?.role === 'officer' && isOrderOwner && (
+              <>
+                {order.status === 'draft' && (
+                  <Button
+                    icon="send"
+                    mode="contained"
+                    onPress={() => setConfirmDialog({ visible: true, type: 'submit', loading: false })}
+                    style={styles.actionButton}
+                    contentStyle={styles.buttonContent}
+                  >
+                    Submit Draft
+                  </Button>
+                )}
+
+                {(order.status === 'pending' || order.status === 'approved') && (
+                  <Button
+                    icon="cancel"
+                    mode="outlined"
+                    textColor={theme.colors.error}
+                    onPress={() => setConfirmDialog({ visible: true, type: 'cancel', loading: false })}
+                    style={styles.actionButton}
+                    contentStyle={styles.buttonContent}
+                  >
+                    Cancel Order
+                  </Button>
+                )}
+              </>
+            )}
+          </View>
         </Modal>
 
-        <Dialog visible={confirmDialog.visible} onDismiss={() => setConfirmDialog({ visible: false, type: null })}>
+        <Dialog 
+          visible={confirmDialog.visible} 
+          onDismiss={() => !confirmDialog.loading && setConfirmDialog({ visible: false, type: null, loading: false })}
+        >
           <Dialog.Title>Confirm Action</Dialog.Title>
           <Dialog.Content>
             <Paragraph>
-              Are you sure you want to {confirmDialog.type === 'approve' ? 'approve' : 
-              confirmDialog.type === 'fulfill' ? 'fulfill' : 'reject'} this order?
+              {confirmDialog.type === 'approve' && 'Are you sure you want to approve this order?'}
+              {confirmDialog.type === 'fulfill' && 'Are you sure you want to fulfill this order?'}
+              {confirmDialog.type === 'reject' && 'Are you sure you want to reject this order?'}
+              {confirmDialog.type === 'cancel' && 'Are you sure you want to cancel this order?'}
+              {confirmDialog.type === 'submit' && 'Are you sure you want to submit this draft order?'}
             </Paragraph>
+            {confirmDialog.type === 'submit' && (
+              <Paragraph style={{ marginTop: 8, fontStyle: 'italic' }}>
+                Once submitted, the order will need to be approved by an admin.
+              </Paragraph>
+            )}
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setConfirmDialog({ visible: false, type: null })}>Cancel</Button>
-            <Button
-              onPress={async () => {
-                setConfirmDialog({ visible: false, type: null });
-                if (confirmDialog.type === 'approve') await handleApprove();
-                else if (confirmDialog.type === 'fulfill') await handleFulfill();
-                else await handleReject();
-                setModalVisible(false);
-              }}
+            <Button 
+              onPress={() => !confirmDialog.loading && setConfirmDialog({ visible: false, type: null, loading: false })}
+              disabled={confirmDialog.loading}
             >
-              Yes
+              Cancel
+            </Button>
+            <Button
+              onPress={() => handleAction(confirmDialog.type)}
+              loading={confirmDialog.loading}
+              disabled={confirmDialog.loading}
+            >
+              {confirmDialog.loading ? 'Processing...' : 'Confirm'}
             </Button>
           </Dialog.Actions>
         </Dialog>
@@ -471,10 +565,32 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   modal: {
-    backgroundColor: 'white',
-    padding: 20,
-    marginHorizontal: 16,
+    padding: 0,
+    marginHorizontal: 24,
     borderRadius: 12,
+    maxWidth: 400,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  modalTitle: {
+    fontWeight: 'bold',
+  },
+  modalContent: {
+    padding: 16,
+  },
+  actionButton: {
+    marginBottom: 12,
+  },
+  buttonContent: {
+    height: 48,
   },
   statusContainer: {
     marginBottom: 16,

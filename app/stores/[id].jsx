@@ -37,7 +37,7 @@ const formatCurrency = (amount) => {
 };
 
 // Tab Components
-const OverviewTab = ({ currentStore, id, theme, onRefresh, refreshing }) => {
+const OverviewTab = ({ currentStore, id, theme, onRefresh, refreshing, isOfficer }) => {
   const { handleAddStorePayment, handleAddStoreDue, showMessage } = useContext(ServicesProvider);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showDueModal, setShowDueModal] = useState(false);
@@ -137,7 +137,7 @@ const OverviewTab = ({ currentStore, id, theme, onRefresh, refreshing }) => {
                   Last Due
                 </Text>
                 <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]}>
-                 ({formatCurrency(currentStore?.dueHistory[0]?.amount || 0)})
+                 ({formatCurrency(currentStore?.dueHistory[currentStore.dueHistory.length -1]?.amount || 0)})
                  {' '}
           { currentStore.dueHistory.at(-1)?.createdAt && new Date(currentStore.dueHistory.at(-1)?.createdAt).toLocaleDateString('en-GB')}
                 </Text>
@@ -174,7 +174,7 @@ const OverviewTab = ({ currentStore, id, theme, onRefresh, refreshing }) => {
             <View style={styles.summaryRow}>
               <View style={styles.summaryItem}>
                 <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>
-                  Total Bussiness
+                  Total Business
                 </Text>
                 <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]}>
                   {formatCurrency(currentStore?.totalFromDues || 0)}
@@ -185,56 +185,58 @@ const OverviewTab = ({ currentStore, id, theme, onRefresh, refreshing }) => {
                   Current Dues
                 </Text>
                 <Text style={[styles.summaryValue, { color: theme.colors.onPrimaryContainer, fontWeight: 'bold' }]}>
-                  {formatCurrency(currentStore.totalFromDues- currentStore.totalPaidAmount || 0)}
+                  {formatCurrency(currentStore.totalFromDues - currentStore.totalPaidAmount || 0)}
                 </Text>
               </View>
             </View>
           </Card.Content>
         </Card>
 
-        <Card style={[styles.quickActionsCard, { backgroundColor: theme.colors.surface }]}>
-          <Card.Title 
-            title="Quick Actions" 
-            titleVariant="titleMedium" 
-            titleStyle={{ color: theme.colors.primary }}
-            left={() => <MaterialCommunityIcons name="lightning-bolt" size={24} color={theme.colors.primary} />}
-          />
-          <Card.Content style={styles.quickActionsContent}>
-            <Button
-              mode="contained"
-              icon="cash-plus"
-              style={styles.quickActionButton}
-              contentStyle={styles.buttonContent}
-              labelStyle={styles.buttonLabel}
-              onPress={() => setShowPaymentModal(true)}
-            >
-              Payment
-            </Button>
-            <Button
-              mode="contained"
-              icon="cart-plus"
-              style={styles.quickActionButton}
-              contentStyle={styles.buttonContent}
-              labelStyle={styles.buttonLabel}
-              onPress={() => router.push({
-                  pathname: "/product-stock",
-                  params: { storeId: id, name: currentStore.storeName }
-                })}
-            >
-              New Order
-            </Button>
-            <Button
-              mode="contained"
-              icon="note-plus"
-              style={styles.quickActionButton}
-              contentStyle={styles.buttonContent}
-              labelStyle={styles.buttonLabel}
-              onPress={() => setShowDueModal(true)}
-            >
-              Add Due
-            </Button>
-          </Card.Content>
-        </Card>
+        {isOfficer && (
+          <Card style={[styles.quickActionsCard, { backgroundColor: theme.colors.surface }]}>
+            <Card.Title 
+              title="Quick Actions" 
+              titleVariant="titleMedium" 
+              titleStyle={{ color: theme.colors.primary }}
+              left={() => <MaterialCommunityIcons name="lightning-bolt" size={24} color={theme.colors.primary} />}
+            />
+            <Card.Content style={styles.quickActionsContent}>
+              <Button
+                mode="contained"
+                icon="cash-plus"
+                style={styles.quickActionButton}
+                contentStyle={styles.buttonContent}
+                labelStyle={styles.buttonLabel}
+                onPress={() => setShowPaymentModal(true)}
+              >
+                Payment
+              </Button>
+              <Button
+                mode="contained"
+                icon="cart-plus"
+                style={styles.quickActionButton}
+                contentStyle={styles.buttonContent}
+                labelStyle={styles.buttonLabel}
+                onPress={() => router.push({
+                    pathname: "/product-stock",
+                    params: { storeId: id, name: currentStore.storeName }
+                  })}
+              >
+                New Order
+              </Button>
+              <Button
+                mode="contained"
+                icon="note-plus"
+                style={styles.quickActionButton}
+                contentStyle={styles.buttonContent}
+                labelStyle={styles.buttonLabel}
+                onPress={() => setShowDueModal(true)}
+              >
+                Add Due
+              </Button>
+            </Card.Content>
+          </Card>
+        )}
 
         <Card style={[styles.infoCard, { backgroundColor: theme.colors.surface }]}>
           <Card.Title 
@@ -303,154 +305,158 @@ const OverviewTab = ({ currentStore, id, theme, onRefresh, refreshing }) => {
         </Card>
       </ScrollView>
 
-      {/* Payment Modal */}
-      <Modal 
-        visible={showPaymentModal} 
-        onDismiss={() => setShowPaymentModal(false)}
-        contentContainerStyle={[styles.modalContainer, { backgroundColor: theme.colors.background }]}
-      >
-        <Text style={[styles.modalTitle, { color: theme.colors.primary }]}>Add Payment</Text>
-        
-        <TextInput
-          label="Amount"
-          value={paymentData.amount}
-          onChangeText={(text) => setPaymentData({...paymentData, amount: text.replace(/[^0-9.]/g, '')})}
-          inputMode="numeric"
-          style={styles.modalInput}
-          mode="outlined"
-        />
-
-        <TextInput
-          label="Payment Method"
-          value={paymentData.paymentMethod}
-          onChangeText={(text) => setPaymentData({...paymentData, paymentMethod: text})}
-          style={styles.modalInput}
-          mode="outlined"
-        />
-
-        <TextInput
-          label="Notes"
-          value={paymentData.notes}
-          onChangeText={(text) => setPaymentData({...paymentData, notes: text})}
-          style={styles.modalInput}
-          mode="outlined"
-          multiline
-        />
-
-        <TouchableOpacity 
-          onPress={() => setShowPaymentDatePicker(true)}
-          style={[styles.datePickerButton, { borderColor: theme.colors.primary }]}
+      {/* Payment Modal - officer only */}
+      {isOfficer && (
+        <Modal 
+          visible={showPaymentModal} 
+          onDismiss={() => setShowPaymentModal(false)}
+          contentContainerStyle={[styles.modalContainer, { backgroundColor: theme.colors.background }]}
         >
-          <Text style={{ color: theme.colors.onSurface }}>
-            {paymentData.date.toLocaleDateString()}
-          </Text>
-        </TouchableOpacity>
-
-        {showPaymentDatePicker && (
-          <DateTimePicker
-            value={paymentData.date}
-            mode="date"
-            display="default"
-            onChange={(event, date) => {
-              setShowPaymentDatePicker(false);
-              if (date) {
-                setPaymentData({...paymentData, date});
-              }
-            }}
+          <Text style={[styles.modalTitle, { color: theme.colors.primary }]}>Add Payment</Text>
+          
+          <TextInput
+            label="Amount"
+            
+            onChangeText={(text) => setPaymentData({...paymentData, amount: text.replace(/[^0-9.]/g, '')})}
+            inputMode="numeric"
+            style={styles.modalInput}
+            mode="outlined"
           />
-        )}
 
-        <View style={styles.modalButtonContainer}>
-          <Button 
-            mode="outlined" 
-            onPress={() => setShowPaymentModal(false)}
-            style={styles.modalButton}
+          <TextInput
+            label="Payment Method"
+            value={paymentData.paymentMethod}
+            onChangeText={(text) => setPaymentData({...paymentData, paymentMethod: text})}
+            style={styles.modalInput}
+            mode="outlined"
+          />
+
+          <TextInput
+            label="Notes"
+            value={paymentData.notes}
+            onChangeText={(text) => setPaymentData({...paymentData, notes: text})}
+            style={styles.modalInput}
+            mode="outlined"
+            multiline
+          />
+
+          <TouchableOpacity 
+            onPress={() => setShowPaymentDatePicker(true)}
+            style={[styles.datePickerButton, { borderColor: theme.colors.primary }]}
           >
-            Cancel
-          </Button>
-          <Button 
-            mode="contained" 
-            onPress={handlePaymentSubmit}
-            style={styles.modalButton}
-            loading={submittingPayment}
-          >
-            Submit Payment
-          </Button>
-        </View>
-      </Modal>
+            <Text style={{ color: theme.colors.onSurface }}>
+              {paymentData.date.toLocaleDateString()}
+            </Text>
+          </TouchableOpacity>
 
-      {/* Due Modal */}
-      <Modal 
-        visible={showDueModal} 
-        onDismiss={() => setShowDueModal(false)}
-        contentContainerStyle={[styles.modalContainer, { backgroundColor: theme.colors.background }]}
-      >
-        <Text style={[styles.modalTitle, { color: theme.colors.primary }]}>Add Due</Text>
-        
-        <TextInput
-          label="Amount"
-          value={dueData.amount}
-          onChangeText={(text) => setDueData({...dueData, amount: text.replace(/[^0-9.]/g, '')})}
-          inputMode="numeric"
-          style={styles.modalInput}
-          mode="outlined"
-        />
+          {showPaymentDatePicker && (
+            <DateTimePicker
+              value={paymentData.date}
+              mode="date"
+              display="default"
+              onChange={(event, date) => {
+                setShowPaymentDatePicker(false);
+                if (date) {
+                  setPaymentData({...paymentData, date});
+                }
+              }}
+            />
+          )}
 
-        <TextInput
-          label="Description"
-          value={dueData.description}
-          onChangeText={(text) => setDueData({...dueData, description: text})}
-          style={styles.modalInput}
-          mode="outlined"
-          multiline
-        />
+          <View style={styles.modalButtonContainer}>
+            <Button 
+              mode="outlined" 
+              onPress={() => setShowPaymentModal(false)}
+              style={styles.modalButton}
+            >
+              Cancel
+            </Button>
+            <Button 
+              mode="contained" 
+              onPress={handlePaymentSubmit}
+              style={styles.modalButton}
+              loading={submittingPayment}
+            >
+              Submit Payment
+            </Button>
+          </View>
+        </Modal>
+      )}
 
-        <TouchableOpacity 
-          onPress={() => setShowDueDatePicker(true)}
-          style={[styles.datePickerButton, { borderColor: theme.colors.primary }]}
+      {/* Due Modal - officer only */}
+      {isOfficer && (
+        <Modal 
+          visible={showDueModal} 
+          onDismiss={() => setShowDueModal(false)}
+          contentContainerStyle={[styles.modalContainer, { backgroundColor: theme.colors.background }]}
         >
-          <Text style={{ color: theme.colors.onSurface }}>
-            {dueData.date.toLocaleDateString()}
-          </Text>
-        </TouchableOpacity>
-
-        {showDueDatePicker && (
-          <DateTimePicker
-            value={dueData.date}
-            mode="date"
-            display="default"
-            onChange={(event, date) => {
-              setShowDueDatePicker(false);
-              if (date) {
-                setDueData({...dueData, date});
-              }
-            }}
+          <Text style={[styles.modalTitle, { color: theme.colors.primary }]}>Add Due</Text>
+          
+          <TextInput
+            label="Amount"
+           
+            onChangeText={(text) => setDueData({...dueData, amount: text.replace(/[^0-9.]/g, '')})}
+            inputMode="numeric"
+            style={styles.modalInput}
+            mode="outlined"
           />
-        )}
 
-        <View style={styles.modalButtonContainer}>
-          <Button 
-            mode="outlined" 
-            onPress={() => setShowDueModal(false)}
-            style={styles.modalButton}
+          <TextInput
+            label="Description"
+            value={dueData.description}
+            onChangeText={(text) => setDueData({...dueData, description: text})}
+            style={styles.modalInput}
+            mode="outlined"
+            multiline
+          />
+
+          <TouchableOpacity 
+            onPress={() => setShowDueDatePicker(true)}
+            style={[styles.datePickerButton, { borderColor: theme.colors.primary }]}
           >
-            Cancel
-          </Button>
-          <Button 
-            mode="contained" 
-            onPress={handleDueSubmit}
-            style={styles.modalButton}
-            loading={submittingDue}
-          >
-            Submit Due
-          </Button>
-        </View>
-      </Modal>
+            <Text style={{ color: theme.colors.onSurface }}>
+              {dueData.date.toLocaleDateString()}
+            </Text>
+          </TouchableOpacity>
+
+          {showDueDatePicker && (
+            <DateTimePicker
+              value={dueData.date}
+              mode="date"
+              display="default"
+              onChange={(event, date) => {
+                setShowDueDatePicker(false);
+                if (date) {
+                  setDueData({...dueData, date});
+                }
+              }}
+            />
+          )}
+
+          <View style={styles.modalButtonContainer}>
+            <Button 
+              mode="outlined" 
+              onPress={() => setShowDueModal(false)}
+              style={styles.modalButton}
+            >
+              Cancel
+            </Button>
+            <Button 
+              mode="contained" 
+              onPress={handleDueSubmit}
+              style={styles.modalButton}
+              loading={submittingDue}
+            >
+              Submit Due
+            </Button>
+          </View>
+        </Modal>
+      )}
     </>
   );
 };
 
-const OrdersTab = ({ currentStore, id, theme, loading, refetchStoreDetails }) => {
+const OrdersTab = ({ currentStore, id, theme, loading, refetchStoreDetails, isOfficer }) => {
   const [orderProducts, setOrderProducts] = useState([]);
   const [newOrder, setNewOrder] = useState({
     productId: '',
@@ -504,7 +510,7 @@ const OrdersTab = ({ currentStore, id, theme, loading, refetchStoreDetails }) =>
           titleVariant="titleMedium"
           titleStyle={{ color: theme.colors.primary }}
           left={() => <MaterialCommunityIcons name="cart" size={24} color={theme.colors.primary} />}
-          right={() => (
+          right={() => isOfficer && (
             <Button
               mode="contained-tonal"
               icon="plus"
@@ -520,7 +526,7 @@ const OrdersTab = ({ currentStore, id, theme, loading, refetchStoreDetails }) =>
           )}
         />
         <Card.Content>
-          {orderProducts.length > 0 && (
+          {isOfficer && orderProducts.length > 0 && (
             <View style={[styles.orderFormContainer, { backgroundColor: theme.colors.surfaceVariant }]}>
               <Text variant="titleSmall" style={{ marginBottom: 8 }}>
                 New Order Items
@@ -547,7 +553,7 @@ const OrdersTab = ({ currentStore, id, theme, loading, refetchStoreDetails }) =>
                 />
                 <TextInput
                   label="Qty"
-                  value={newOrder.quantity}
+                  
                   onChangeText={(text) => setNewOrder({ ...newOrder, quantity: text.replace(/[^0-9]/g, '') })}
                   inputMode="numeric"
                   style={{ flex: 1, marginHorizontal: 8 }}
@@ -555,7 +561,7 @@ const OrdersTab = ({ currentStore, id, theme, loading, refetchStoreDetails }) =>
                 />
                 <TextInput
                   label="Price"
-                  value={newOrder.price}
+                  
                   onChangeText={(text) => setNewOrder({ ...newOrder, price: text.replace(/[^0-9.]/g, '') })}
                   inputMode="numeric"
                   style={{ flex: 1 }}
@@ -642,21 +648,23 @@ const OrdersTab = ({ currentStore, id, theme, loading, refetchStoreDetails }) =>
               <Text style={[styles.emptyDataText, { color: theme.colors.onSurface }]}>
                 No orders recorded
               </Text>
-              <Button
-                mode="contained"
-                icon="cart-plus"
-                onPress={() => router.push({
-                  pathname: '/product-stock',
-                  params: {
-                    storeId: id,
-                    name: currentStore.storeName
-                  }
-                })}
-                style={{ marginTop: 16 }}
-                contentStyle={styles.buttonContent}
-              >
-                Create Order
-              </Button>
+              {isOfficer && (
+                <Button
+                  mode="contained"
+                  icon="cart-plus"
+                  onPress={() => router.push({
+                    pathname: '/product-stock',
+                    params: {
+                      storeId: id,
+                      name: currentStore.storeName
+                    }
+                  })}
+                  style={{ marginTop: 16 }}
+                  contentStyle={styles.buttonContent}
+                >
+                  Create Order
+                </Button>
+              )}
             </View>
           )}
         </Card.Content>
@@ -665,7 +673,7 @@ const OrdersTab = ({ currentStore, id, theme, loading, refetchStoreDetails }) =>
   );
 };
 
-const PaymentsTab = ({ currentStore, id, theme, handleAddStorePayment, loading, refetchStoreDetails }) => {
+const PaymentsTab = ({ currentStore, id, theme, handleAddStorePayment, loading, refetchStoreDetails, isOfficer }) => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentData, setPaymentData] = useState({
     amount: '',
@@ -721,7 +729,7 @@ const PaymentsTab = ({ currentStore, id, theme, handleAddStorePayment, loading, 
           titleVariant="titleMedium"
           titleStyle={{ color: theme.colors.primary }}
           left={() => <MaterialCommunityIcons name="cash-multiple" size={24} color={theme.colors.primary} />}
-          right={() => (
+          right={() => isOfficer && (
             <Button
               mode="contained-tonal"
               icon="plus"
@@ -776,101 +784,105 @@ const PaymentsTab = ({ currentStore, id, theme, handleAddStorePayment, loading, 
               <Text style={[styles.emptyDataText, { color: theme.colors.onSurface }]}>
                 No payments recorded
               </Text>
-              <Button
-                mode="contained"
-                icon="cash-plus"
-                onPress={() => setShowPaymentModal(true)}
-                style={{ marginTop: 16 }}
-                contentStyle={styles.buttonContent}
-              >
-                Record Payment
-              </Button>
+              {isOfficer && (
+                <Button
+                  mode="contained"
+                  icon="cash-plus"
+                  onPress={() => setShowPaymentModal(true)}
+                  style={{ marginTop: 16 }}
+                  contentStyle={styles.buttonContent}
+                >
+                  Record Payment
+                </Button>
+              )}
             </View>
           )}
         </Card.Content>
       </Card>
 
-      <Portal>
-        <Modal 
-          visible={showPaymentModal} 
-          onDismiss={() => setShowPaymentModal(false)}
-          contentContainerStyle={[styles.modalContainer, { backgroundColor: theme.colors.background }]}
-        >
-          <Text style={[styles.modalTitle, { color: theme.colors.primary }]}>Add Payment</Text>
-          
-          <TextInput
-            label="Amount"
-            value={paymentData.amount}
-            onChangeText={(text) => setPaymentData({...paymentData, amount: text.replace(/[^0-9.]/g, '')})}
-            inputMode="numeric"
-            style={styles.modalInput}
-            mode="outlined"
-          />
-
-          <TextInput
-            label="Payment Method"
-            value={paymentData.paymentMethod}
-            onChangeText={(text) => setPaymentData({...paymentData, paymentMethod: text})}
-            style={styles.modalInput}
-            mode="outlined"
-          />
-
-          <TextInput
-            label="Notes"
-            value={paymentData.notes}
-            onChangeText={(text) => setPaymentData({...paymentData, notes: text})}
-            style={styles.modalInput}
-            mode="outlined"
-            multiline
-          />
-
-          <TouchableOpacity 
-            onPress={() => setShowDatePicker(true)}
-            style={[styles.datePickerButton, { borderColor: theme.colors.primary }]}
+      {isOfficer && (
+        <Portal>
+          <Modal 
+            visible={showPaymentModal} 
+            onDismiss={() => setShowPaymentModal(false)}
+            contentContainerStyle={[styles.modalContainer, { backgroundColor: theme.colors.background }]}
           >
-            <Text style={{ color: theme.colors.onSurface }}>
-              {paymentData.date.toLocaleDateString()}
-            </Text>
-          </TouchableOpacity>
-
-          {showDatePicker && (
-            <DateTimePicker
-              value={paymentData.date}
-              mode="date"
-              display="default"
-              onChange={(event, date) => {
-                setShowDatePicker(false);
-                if (date) {
-                  setPaymentData({...paymentData, date});
-                }
-              }}
+            <Text style={[styles.modalTitle, { color: theme.colors.primary }]}>Add Payment</Text>
+            
+            <TextInput
+              label="Amount"
+              
+              onChangeText={(text) => setPaymentData({...paymentData, amount: text.replace(/[^0-9.]/g, '')})}
+              inputMode="numeric"
+              style={styles.modalInput}
+              mode="outlined"
             />
-          )}
 
-          <View style={styles.modalButtonContainer}>
-            <Button 
-              mode="outlined" 
-              onPress={() => setShowPaymentModal(false)}
-              style={styles.modalButton}
+            <TextInput
+              label="Payment Method"
+              value={paymentData.paymentMethod}
+              onChangeText={(text) => setPaymentData({...paymentData, paymentMethod: text})}
+              style={styles.modalInput}
+              mode="outlined"
+            />
+
+            <TextInput
+              label="Notes"
+              value={paymentData.notes}
+              onChangeText={(text) => setPaymentData({...paymentData, notes: text})}
+              style={styles.modalInput}
+              mode="outlined"
+              multiline
+            />
+
+            <TouchableOpacity 
+              onPress={() => setShowDatePicker(true)}
+              style={[styles.datePickerButton, { borderColor: theme.colors.primary }]}
             >
-              Cancel
-            </Button>
-            <Button 
-              mode="contained" 
-              onPress={handlePaymentSubmit}
-              style={styles.modalButton}
-              loading={submitting}
-            >
-              Submit Payment
-            </Button>
-          </View>
-        </Modal>
-      </Portal>
+              <Text style={{ color: theme.colors.onSurface }}>
+                {paymentData.date.toLocaleDateString()}
+              </Text>
+            </TouchableOpacity>
+
+            {showDatePicker && (
+              <DateTimePicker
+                value={paymentData.date}
+                mode="date"
+                display="default"
+                onChange={(event, date) => {
+                  setShowDatePicker(false);
+                  if (date) {
+                    setPaymentData({...paymentData, date});
+                  }
+                }}
+              />
+            )}
+
+            <View style={styles.modalButtonContainer}>
+              <Button 
+                mode="outlined" 
+                onPress={() => setShowPaymentModal(false)}
+                style={styles.modalButton}
+              >
+                Cancel
+              </Button>
+              <Button 
+                mode="contained" 
+                onPress={handlePaymentSubmit}
+                style={styles.modalButton}
+                loading={submitting}
+              >
+                Submit Payment
+              </Button>
+            </View>
+          </Modal>
+        </Portal>
+      )}
     </ScrollView>
   );
 };
 
-const DuesTab = ({ currentStore, id, theme, handleAddStoreDue, loading, refetchStoreDetails }) => {
+const DuesTab = ({ currentStore, id, theme, handleAddStoreDue, loading, refetchStoreDetails, isOfficer }) => {
   const [showDueModal, setShowDueModal] = useState(false);
   const [dueData, setDueData] = useState({
     amount: '',
@@ -960,7 +972,7 @@ const DuesTab = ({ currentStore, id, theme, handleAddStoreDue, loading, refetchS
           titleVariant="titleMedium"
           titleStyle={{ color: theme.colors.primary }}
           left={() => <MaterialCommunityIcons name="receipt" size={24} color={theme.colors.primary} />}
-          right={() => (
+          right={() => isOfficer && (
             <Button
               mode="contained-tonal"
               icon="plus"
@@ -996,95 +1008,99 @@ const DuesTab = ({ currentStore, id, theme, handleAddStoreDue, loading, refetchS
           ) : (
             <View style={styles.emptyDataContainer}>
               <MaterialCommunityIcons
-                name="receipt-text-remove"
+                name="receipt"
                 size={40}
                 color={theme.colors.backdrop}
               />
               <Text style={[styles.emptyDataText, { color: theme.colors.onSurface }]}>
                 No dues recorded
               </Text>
-              <Button
-                mode="contained"
-                icon="note-plus"
-                onPress={() => setShowDueModal(true)}
-                style={{ marginTop: 16 }}
-                contentStyle={styles.buttonContent}
-              >
-                Add Due
-              </Button>
+              {isOfficer && (
+                <Button
+                  mode="contained"
+                  icon="note-plus"
+                  onPress={() => setShowDueModal(true)}
+                  style={{ marginTop: 16 }}
+                  contentStyle={styles.buttonContent}
+                >
+                  Add Due
+                </Button>
+              )}
             </View>
           )}
         </Card.Content>
       </Card>
 
-      <Portal>
-        <Modal 
-          visible={showDueModal} 
-          onDismiss={() => setShowDueModal(false)}
-          contentContainerStyle={[styles.modalContainer, { backgroundColor: theme.colors.background }]}
-        >
-          <Text style={[styles.modalTitle, { color: theme.colors.primary }]}>Add Due</Text>
-          
-          <TextInput
-            label="Amount"
-            value={dueData.amount}
-            onChangeText={(text) => setDueData({...dueData, amount: text.replace(/[^0-9.]/g, '')})}
-            inputMode="numeric"
-            style={styles.modalInput}
-            mode="outlined"
-          />
-
-          <TextInput
-            label="Description"
-            value={dueData.description}
-            onChangeText={(text) => setDueData({...dueData, description: text})}
-            style={styles.modalInput}
-            mode="outlined"
-            multiline
-          />
-
-          <TouchableOpacity 
-            onPress={() => setShowDatePicker(true)}
-            style={[styles.datePickerButton, { borderColor: theme.colors.primary }]}
+      {isOfficer && (
+        <Portal>
+          <Modal 
+            visible={showDueModal} 
+            onDismiss={() => setShowDueModal(false)}
+            contentContainerStyle={[styles.modalContainer, { backgroundColor: theme.colors.background }]}
           >
-            <Text style={{ color: theme.colors.onSurface }}>
-              {dueData.date.toLocaleDateString()}
-            </Text>
-          </TouchableOpacity>
-
-          {showDatePicker && (
-            <DateTimePicker
-              value={dueData.date}
-              mode="date"
-              display="default"
-              onChange={(event, date) => {
-                setShowDatePicker(false);
-                if (date) {
-                  setDueData({...dueData, date});
-                }
-              }}
+            <Text style={[styles.modalTitle, { color: theme.colors.primary }]}>Add Due</Text>
+            
+            <TextInput
+              label="Amount"
+            
+              onChangeText={(text) => setDueData({...dueData, amount: text.replace(/[^0-9.]/g, '')})}
+              inputMode="numeric"
+              style={styles.modalInput}
+              mode="outlined"
             />
-          )}
 
-          <View style={styles.modalButtonContainer}>
-            <Button 
-              mode="outlined" 
-              onPress={() => setShowDueModal(false)}
-              style={styles.modalButton}
+            <TextInput
+              label="Description"
+              value={dueData.description}
+              onChangeText={(text) => setDueData({...dueData, description: text})}
+              style={styles.modalInput}
+              mode="outlined"
+              multiline
+            />
+
+            <TouchableOpacity 
+              onPress={() => setShowDatePicker(true)}
+              style={[styles.datePickerButton, { borderColor: theme.colors.primary }]}
             >
-              Cancel
-            </Button>
-            <Button 
-              mode="contained" 
-              onPress={handleDueSubmit}
-              style={styles.modalButton}
-              loading={submitting}
-            >
-              Submit Due
-            </Button>
-          </View>
-        </Modal>
-      </Portal>
+              <Text style={{ color: theme.colors.onSurface }}>
+                {dueData.date.toLocaleDateString()}
+              </Text>
+            </TouchableOpacity>
+
+            {showDatePicker && (
+              <DateTimePicker
+                value={dueData.date}
+                mode="date"
+                display="default"
+                onChange={(event, date) => {
+                  setShowDatePicker(false);
+                  if (date) {
+                    setDueData({...dueData, date});
+                  }
+                }}
+              />
+            )}
+
+            <View style={styles.modalButtonContainer}>
+              <Button 
+                mode="outlined" 
+                onPress={() => setShowDueModal(false)}
+                style={styles.modalButton}
+              >
+                Cancel
+              </Button>
+              <Button 
+                mode="contained" 
+                onPress={handleDueSubmit}
+                style={styles.modalButton}
+                loading={submitting}
+              >
+                Submit Due
+              </Button>
+            </View>
+          </Modal>
+        </Portal>
+      )}
     </ScrollView>
   );
 };
@@ -1096,12 +1112,14 @@ const StoreDetailsScreen = () => {
   const { 
     currentStore, 
     loading, 
+    user,
     handleGetStoreById,
     handleAddStorePayment,
     handleAddStoreDue,
     showMessage
   } = useContext(ServicesProvider);
-console.log(currentStore)
+
+  const isOfficer = user?.role === 'officer';
   const [refreshing, setRefreshing] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
   const [tabIndex, setTabIndex] = useState(0);
@@ -1193,7 +1211,6 @@ console.log(currentStore)
 
       <View style={styles.tabContainer}>
         <Tab.Navigator
-          
           initialRouteName="Overview"
           screenListeners={{
             state: handleTabChange,
@@ -1240,7 +1257,8 @@ console.log(currentStore)
                 id={id} 
                 theme={theme} 
                 onRefresh={onRefresh} 
-                refreshing={refreshing} 
+                refreshing={refreshing}
+                isOfficer={isOfficer}
               />
             )}
             options={{
@@ -1262,6 +1280,7 @@ console.log(currentStore)
                 theme={theme}
                 loading={loading && !refreshing}
                 refetchStoreDetails={refetchStoreDetails}
+                isOfficer={isOfficer}
               />
             )}
             options={{
@@ -1285,6 +1304,7 @@ console.log(currentStore)
                 showMessage={showMessage}
                 loading={loading && !refreshing}
                 refetchStoreDetails={refetchStoreDetails}
+                isOfficer={isOfficer}
               />
             )}
             options={{
@@ -1308,6 +1328,7 @@ console.log(currentStore)
                 showMessage={showMessage}
                 loading={loading && !refreshing}
                 refetchStoreDetails={refetchStoreDetails}
+                isOfficer={isOfficer}
               />
             )}
             options={{
